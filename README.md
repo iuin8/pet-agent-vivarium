@@ -34,8 +34,9 @@ VivariumRender    PetRenderer 后端实现(Orb Metal / Sprite CALayer / Slime);L
                   专有 SDK(Vendor/，gitignored)留在宿主侧条件编译,经 PetRenderer 协议接入
 
 SandboxPhysics    旁路独立子系统(deps[]，不在上面单向链里):GPU 物理沙盒 ——
-（形象无关，可独立抽出）  FallingSand 元胞自动机(雪/水/冰/汽) + Rain 自由粒子。Rendering 的
-                  overlay 渲染器消费它;其 occluder 输入是通用可选项,引擎不知「桌宠」。
+（形象无关，可独立抽出）  FallingSand 统一元胞自动机:雪/雨/水/冰/汽 同一套引擎(雪=kind0、
+                  雨=kind1 water 粒子,同源)。Rendering 的 overlay 渲染器消费它;
+                  其 occluder 输入是通用可选项,引擎不知「桌宠」。
 ```
 
 **平台 API 隔离**：AppKit / Accessibility / ScreenCaptureKit / CoreGraphics 一律留在引擎**外**的 host 层（Shell/App），经值类型契约 + 闭包/协议注入喂入（`DesktopSnapshot` 值类型、`RuntimeClient` 协议 + `NoOpRuntimeClient`、`rendererFactory` 注入钩子即范式）。引擎 Core/Assets/Motion/Behavior 保持 Foundation-only。
@@ -63,13 +64,13 @@ Vivarium 作为**独立开源仓库**发布，由 PetAgent 宿主仓以 **git su
 |---|---|
 | `Context` | 桌面环境抽象 + Accessibility/AX 前台窗口桥（值类型契约喂入引擎） |
 | `RuntimeBridge` | `PetMotionController` + `RuntimeClient` 物理 step（运动仲裁 / 漫步 / 爬墙 / perch）+ `PresentationMapper`/`RenderState` |
-| `SandboxPhysics` | **形象无关的 GPU 物理沙盒**：① FallingSand 元胞自动机（雪/水/冰/汽 堆积 + 相变 + 升华深度负反馈）② Rain 自由粒子（雨丝 + 风 + 溅射）。deps `[]`，只 Metal/simd/Foundation，可被任意 macOS+Metal 项目复用。**用法文档 → [Sources/SandboxPhysics/README.md](Sources/SandboxPhysics/README.md)** |
-| `Rendering` | `PetRenderer` 后端（Orb Metal / Sprite CALayer / Slime / Live2D）+ 托管 sim 的 overlay 渲染器（`MetalSnowOverlayView` / `MetalRainRenderer`） |
+| `SandboxPhysics` | **形象无关的 GPU 物理沙盒**：falling-sand 统一元胞自动机 —— 雪/雨/水/冰/汽 同一套引擎(雪=kind0 粒子、雨=kind1 water 粒子,落地漫流成水洼,同源)，含堆积 + 相变 + 升华深度负反馈 + 温度耦合。deps `[]`，只 Metal/simd/Foundation，可被任意 macOS+Metal 项目复用。**用法文档 → [Sources/SandboxPhysics/README.md](Sources/SandboxPhysics/README.md)** |
+| `Rendering` | `PetRenderer` 后端（Orb Metal / Sprite CALayer / Slime / Live2D）+ 托管 sim 的 overlay 渲染器（`MetalSnowOverlayView`） |
 | `ShimejiImport` | Shimeji `actions.xml`/`behaviors.xml` 解析 → sprite 包转换 |
 | `PetCatalog` | petdex 在线目录浏览 + 一键安装（反 SSRF host 白名单） |
 | `PetBehavior` | 数据驱动 Shimeji 行为状态机（加权随机 + 条件门控 + NextBehavior 转移图，JavaScriptCore 条件求值器） |
 
-> **三套物理互不冲突**：桌宠离散刚体（重力/拖拽/爬墙）走 `RuntimeBridge`；Shimeji 脚本积分（Fall/Jump/Dragged）在 `PetBehavior`；GPU 沙盒（雪 CA + 雨粒子）在 `SandboxPhysics`。`SandboxPhysics` 零 Vivarium 依赖、可独立抽出复用；其 occluder（挡雪轮廓）是通用可选输入（nil 即禁用），宿主喂入桌宠轮廓而引擎不知「桌宠」。
+> **三套物理互不冲突**：桌宠离散刚体（重力/拖拽/爬墙）走 `RuntimeBridge`；Shimeji 脚本积分（Fall/Jump/Dragged）在 `PetBehavior`；GPU 沙盒（雪/雨/水/冰/汽 统一 falling-sand CA）在 `SandboxPhysics`。`SandboxPhysics` 零 Vivarium 依赖、可独立抽出复用；其 occluder（挡雪轮廓）是通用可选输入（nil 即禁用），宿主喂入桌宠轮廓而引擎不知「桌宠」。
 
 ## 构建 / 测试
 
