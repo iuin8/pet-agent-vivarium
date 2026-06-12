@@ -25,6 +25,7 @@ let package = Package(
             name: "SandboxPhysics",
             dependencies: [],
             path: "Sources/SandboxPhysics",
+            exclude: ["README.md"],
             linkerSettings: [.linkedFramework("Metal")]
         ),
         .target(
