@@ -1,13 +1,13 @@
 # SandboxPhysics
 
-> 形象无关的 **GPU 物理沙盒** —— 两套互相独立的 Metal compute 模拟器,零业务依赖(只 `import Metal / simd / Foundation`),可被任意 macOS + Metal 项目单独复用。
+> 形象无关的 **GPU 物理沙盒** —— 基于 **falling-sand 元胞自动机**的统一天气/材质模拟器,零业务依赖(只 `import Metal / simd / Foundation`),可被任意 macOS + Metal 项目单独复用。
 
-| sim | 类型 | 干什么 |
-|---|---|---|
-| **FallingSand** | 元胞自动机（cellular automata） | 雪 / 水 / 冰 / 汽 的下落、堆积、漫流、相变、升华平衡;飞行浮点粒子 + 落地 cell-CA 混合 |
-| **Rain** | GPU 自由粒子 | 雨丝积分 + 风倾斜 + 落地溅射(splash)+ 可选写入雪堆 water cell |
+**一套引擎,多种材质**:雪 / 雨 / 水 / 冰 / 汽 全是同一个 falling-sand 引擎里的 **species**,共享重力、堆积、漫流、相变、升华、温度耦合 —— 不是「雪引擎 + 雨引擎」两套,而是一套 CA 跑全部降水/材质:
 
-两套 sim 互不依赖,可单用其一,也可叠在同一屏。
+- **雪** = `kind 0` 飞行浮点粒子 → 落地沉积 snow cell → 堆积成坡、升华平衡
+- **雨** = `kind 1` 飞行 water 粒子 → 落地沉积 water cell → 漫流成水洼、温度耦合(冷天冻 ice / 热天蒸发 steam)、落地按概率溅 `kind 2` splash 水花
+
+实现完全同源(同一个 `FallingSandParticles.emitTop(kind:)` + 同一个 CA 网格),靠 `kind` 区分。
 
 ## 要求
 
@@ -18,7 +18,7 @@
 
 ```swift
 // Package.swift
-.package(url: "https://github.com/iuin8/pet-agent-vivarium", from: "0.2.0")
+.package(url: "https://github.com/iuin8/pet-agent-vivarium", from: "0.3.0")
 
 // target 依赖（只取物理库这一块）
 .product(name: "SandboxPhysics", package: "pet-agent-vivarium")
@@ -57,7 +57,8 @@ guard let driver = FallingSandDriver(
 func renderFrame(into commandBuffer: MTLCommandBuffer,
                  renderPass: MTLRenderPassDescriptor,
                  dt: Float) {
-    driver.spawnSnow = true                  // 开降雪
+    driver.spawnSnow = true                  // 开降雪(kind 0 粒子)
+    driver.spawnRain = false                 // 开降雨(kind 1 = water 粒子,落地漫流成水洼)
     driver.ambientTemperature = 0.3          // 环境温度 0..1(冷→雪留存 / 暖→融成水)
     driver.tuning.windStrength = 2.0         // 物理参数热调
     driver.pendingRects = [                   // 窗口/障碍遮挡矩形(cell 坐标, y=0 在底)
@@ -117,41 +118,6 @@ driver.pendingPetOccluder = FallingSandDriver.PetOccluderFrame(
 
 - **`FallingSandGPUEngine`** —— 纯 CA 内核（自己管粒子时用）:`init?(device:queue:width:height:)` → `uploadTemperatures(_:)` / `fillTemperature(_:)` / `spawnTopRow(_:fillRatio:)` / `uploadRects(_:)` / `uploadPetMask(_:originCellX:originCellY:w:h:)` / `step(dt:)`,渲染读 `cellBufferForRender: MTLBuffer`。
 - **`FallingSandSimulation`** —— 纯 CPU 参考实现（`init(width:height:seed:)` / `step(dt:temperatures:)` / `stepMovementOnly()`），与 GPU 逐格对拍,可做确定性单测,也可当无 GPU 环境的 fallback。
-
----
-
-## Rain —— GPU 自由粒子雨
-
-`GPURainCoordinator`（sim + GPU 编码）+ `MetalRainRenderer`（`MTKView` 宿主,自动每帧 draw）。
-
-```swift
-import SandboxPhysics
-
-// 1. 创建 coordinator(8 个参数都有默认值)
-let rain = GPURainCoordinator(
-    particleCapacity: 2048,
-    gravity: 1200,
-    windTiltRatio: 0.5,
-    wetnessLerpPerFrame: 0.02
-)
-
-// 2. 挂到 MTKView
-let view = MetalRainRenderer.make(frame: bounds)
-view?.attach(coordinator: rain)
-
-// 3. 每帧(如天气更新时)推进逻辑状态 + 触发重绘
-let uniforms = rain?.tick(dt: 1.0/60.0, isRainEnabled: true, windX: windSpeedPx)
-rain?.setCollisionRects(windowRects)          // 可选:雨打窗口顶 → splash
-rain?.setPileBuffer(snowBuf, gridSize: g, cellSize: c)  // 可选:雨落地写 water cell 进 FallingSand
-view?.requestRedraw()
-
-// 4. MetalRainRenderer.draw() 自动触发 → 内部 rain.encodeFrame(...) 编码 compute + render pass
-view?.startRain()   // / stopRain()
-```
-
-- 风:`rain.externalWindX: Float?`（优先级高于 `tick(windX:)`;kernel 内 /3 衰减,雨比雪受风弱）。
-- 粒子数据 `RainGPUParticle`（`position` / `velocity` / `lifetime` / `seed`,stride 24B）;主雨 `velocity.y<0`,落地 spawn 的短寿命 splash 子粒子 `velocity.y>0`。
-- 碰撞 `RainCollisionRect(minX:minY:maxX:maxY:)`（≤64 个,kernel 用顶边判跨越触发 splash）。
 
 ---
 

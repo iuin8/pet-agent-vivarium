@@ -2,9 +2,9 @@ import AppKit
 import Metal
 import MetalKit
 import QuartzCore
-// 物理 sim(FallingSand + Rain)已分出独立 SandboxPhysics target;此处 @_exported
-// 再导出,让现有 `import Rendering` 的宿主(Shell/App)无需改动即可继续用 FallingSand*/
-// GPURainCoordinator 等类型(透明再导出,零调用方改动)。
+// FallingSand 物理引擎(雪/雨/水/冰/汽 统一元胞自动机)已分出独立 SandboxPhysics
+// target;此处 @_exported 再导出,让现有 `import Rendering` 的宿主(Shell/App)无需
+// 改动即可继续用 FallingSandDriver 等类型(透明再导出,零调用方改动)。
 @_exported import SandboxPhysics
 
 /// 桌面雪 overlay 的 MTKView 宿主。**falling-sand CA 是唯一雪路径**（旧 GPU 粒子雪
