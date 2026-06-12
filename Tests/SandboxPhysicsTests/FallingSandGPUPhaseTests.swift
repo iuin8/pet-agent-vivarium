@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// GPU 相变不变量测试。相变用位置哈希 RNG（与 CPU 顺序流分歧），不做逐位对拍，
 /// 测「方向正确 + 守恒有界」这类不变量。

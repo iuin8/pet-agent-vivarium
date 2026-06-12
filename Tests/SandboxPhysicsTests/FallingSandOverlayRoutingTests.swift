@@ -1,5 +1,6 @@
 import Metal
 import Testing
+@testable import SandboxPhysics
 @testable import Rendering
 
 /// MetalSnowOverlayView 的 falling-sand 分发回归（falling-sand 是唯一雪路径）。锁死：

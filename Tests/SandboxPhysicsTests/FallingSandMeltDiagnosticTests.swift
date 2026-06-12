@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 诊断「底部雪堆不起来、往右滑、无摩擦」：怀疑夏季真实气温(ambient≈0.83)>meltThreshold(0.50)
 /// → 雪落地即融成水 → 水无 angle of repose、横向漫流 = 无摩擦平铺滑动。

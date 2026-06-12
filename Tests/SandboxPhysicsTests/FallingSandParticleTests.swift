@@ -1,7 +1,7 @@
 import Testing
 import Metal
 import simd
-@testable import Rendering
+@testable import SandboxPhysics
 
 @Suite("FallingSand 飞行粒子")
 struct FallingSandParticleTests {

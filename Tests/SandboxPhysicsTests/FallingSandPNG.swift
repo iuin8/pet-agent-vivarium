@@ -2,7 +2,7 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 把网格渲染成 RGBA PNG 落到 /tmp，供人/Claude `Read` 做视觉自评。
 /// y=0 在底 → 写图时翻转到图像底部。每 cell 放大 `scale` 像素方块。

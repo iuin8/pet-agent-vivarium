@@ -1,5 +1,5 @@
 import Testing
-@testable import Rendering
+@testable import SandboxPhysics
 
 @Suite("FallingSandMovement 重力 pass")
 struct FallingSandMovementFallTests {

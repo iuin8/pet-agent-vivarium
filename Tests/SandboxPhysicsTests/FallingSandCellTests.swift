@@ -1,6 +1,6 @@
 import Testing
 import simd
-@testable import Rendering
+@testable import SandboxPhysics
 
 @Suite("FallingSandCell payload")
 struct FallingSandCellTests {

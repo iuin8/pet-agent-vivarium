@@ -1,7 +1,7 @@
 import Testing
 import Metal
 import simd
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// splash 水花：主雨落地先沉积 water cell，再按 `splashProbability` 把自己转成一颗
 /// 弹道水花（kind=2，横飞+上抛，弧线消亡，不二次沉积）。雪不溅。

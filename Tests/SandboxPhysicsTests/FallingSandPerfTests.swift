@@ -1,7 +1,7 @@
 import Testing
 import Metal
 import Foundation
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 全屏 2px 网格性能实测：批处理 step（单 command buffer）下，~53 万 cell 的
 /// 每帧 step 耗时。判 2px 加密是否撑得住 60fps（<16ms）/ 30fps（<33ms）。

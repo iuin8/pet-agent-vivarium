@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 柔和渲染离屏自评：GPU 降雪场景 → soft pipeline 渲染到离屏纹理 → readback →
 /// PNG，供 Read 目检柔边/真雪感。不靠屏幕截图（避开降采样/黑屏/区域越界坑）。

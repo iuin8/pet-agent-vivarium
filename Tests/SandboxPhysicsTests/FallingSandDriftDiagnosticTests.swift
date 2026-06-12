@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 回归守护「屏幕底部雪不断右滑」：settled CA 雪堆**不允许**有方向性横漂。
 /// 诊断结论：CA 移动每帧翻转 leftFirst → settled 堆严格对称（任何窗口布局、
