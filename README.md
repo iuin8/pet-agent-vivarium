@@ -63,7 +63,7 @@ Vivarium 作为**独立开源仓库**发布，由 PetAgent 宿主仓以 **git su
 |---|---|
 | `Context` | 桌面环境抽象 + Accessibility/AX 前台窗口桥（值类型契约喂入引擎） |
 | `RuntimeBridge` | `PetMotionController` + `RuntimeClient` 物理 step（运动仲裁 / 漫步 / 爬墙 / perch）+ `PresentationMapper`/`RenderState` |
-| `SandboxPhysics` | **形象无关的 GPU 物理沙盒**：① FallingSand 元胞自动机（雪/水/冰/汽 堆积 + 相变 + 升华深度负反馈）② Rain 自由粒子（雨丝 + 风 + 溅射）。deps `[]`，只 Metal/simd/Foundation，可被任意 macOS+Metal 项目复用 |
+| `SandboxPhysics` | **形象无关的 GPU 物理沙盒**：① FallingSand 元胞自动机（雪/水/冰/汽 堆积 + 相变 + 升华深度负反馈）② Rain 自由粒子（雨丝 + 风 + 溅射）。deps `[]`，只 Metal/simd/Foundation，可被任意 macOS+Metal 项目复用。**用法文档 → [Sources/SandboxPhysics/README.md](Sources/SandboxPhysics/README.md)** |
 | `Rendering` | `PetRenderer` 后端（Orb Metal / Sprite CALayer / Slime / Live2D）+ 托管 sim 的 overlay 渲染器（`MetalSnowOverlayView` / `MetalRainRenderer`） |
 | `ShimejiImport` | Shimeji `actions.xml`/`behaviors.xml` 解析 → sprite 包转换 |
 | `PetCatalog` | petdex 在线目录浏览 + 一键安装（反 SSRF host 白名单） |
