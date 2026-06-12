@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// GPU 完整 step（移动 + 相变）的集成 + 视觉自评。dump PNG 供人/Claude 看，
 /// 对照 CPU 版 `/tmp/fallingsand_snow.png` 形态。

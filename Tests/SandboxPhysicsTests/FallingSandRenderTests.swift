@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 像素渲染 pass 离屏验证。填满单一元素，渲染到 RGBA8 离屏纹理读回，断言
 /// 颜色映射正确（snow 白 / water 蓝 / empty 透明）。均匀填充 → 朝向无关。

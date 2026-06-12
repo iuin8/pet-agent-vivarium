@@ -1,7 +1,7 @@
 import Testing
 import Metal
 import simd
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 飞行粒子渲染离屏自评：emit + 积分几帧 → 渲染粒子层到离屏纹理 → PNG。
 /// 目检大小不一的软圆雪花（根治「做不大/随机大小」的视觉验证）。

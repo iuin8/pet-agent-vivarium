@@ -1,7 +1,7 @@
 import Metal
 import Testing
 import simd
-@testable import Rendering
+@testable import SandboxPhysics
 
 // MARK: - Particle struct layout
 

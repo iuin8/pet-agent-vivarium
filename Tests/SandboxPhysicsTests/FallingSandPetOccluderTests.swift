@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// pet 第二 occluder（雪堆 pet 身上）离屏确定性验收。
 /// FS overlay 截图抓不到（见 memory petagent-overlay-not-screencapturable），

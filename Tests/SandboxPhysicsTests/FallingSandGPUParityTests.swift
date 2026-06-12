@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// GPU atomic 认领移动 vs CPU 参考的逐格对拍。只比**确定性移动**（gravity
 /// forced + flow，无相变、无雪概率门）—— 这部分两侧均无 RNG，必须逐格一致。

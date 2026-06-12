@@ -1,6 +1,6 @@
 import Testing
 import Metal
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 雨 = 一等公民 water 物理：雨粒子（kind=1）落地沉积成 FS water cell → FS 水漫流
 /// 成水洼；温度耦合自然成立——温和天保持液态、冷天冻成冰。

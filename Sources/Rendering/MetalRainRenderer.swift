@@ -2,6 +2,7 @@ import AppKit
 import Metal
 import MetalKit
 import QuartzCore
+import SandboxPhysics   // GPURainCoordinator 等 rain sim 类型已分出 SandboxPhysics target
 
 /// 雨粒子的 Metal MTKView 容器,挂在 `DesktopOverlayView` 内,跟
 /// `MetalSnowOverlayView` 平级。

@@ -1,5 +1,5 @@
 import Testing
-@testable import Rendering
+@testable import SandboxPhysics
 
 @Suite("FallingSandSimulation 编排")
 struct FallingSandSimulationTests {

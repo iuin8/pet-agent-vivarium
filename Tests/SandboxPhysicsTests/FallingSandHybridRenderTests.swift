@@ -1,7 +1,7 @@
 import Testing
 import Metal
 import simd
-@testable import Rendering
+@testable import SandboxPhysics
 
 /// 全链路混合雪离屏自评：手动跑 driver 的 tick 序列（emit→integrate→land→step→
 /// 渲染 CA 积雪 + 粒子两层）多帧，深色底 dump PNG。验证雪从顶落下、**底部**堆积
