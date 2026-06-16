@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Vivarium",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS("15.0")],
     products: [
         .library(name: "Context", targets: ["Context"]),
         .library(name: "RuntimeBridge", targets: ["RuntimeBridge"]),
