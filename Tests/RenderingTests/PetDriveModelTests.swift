@@ -71,13 +71,40 @@ struct PetDriveModelTests {
         #expect(renderer.drivesOwnWindowPosition == false)
     }
 
-    @Test("SpriteSheetPetRenderer.drivesOwnWindowPosition 为 false（activityStateIndicator 当前不自管窗口）")
+    @Test("SpriteSheetPetRenderer.drivesOwnWindowPosition 为 false（activityStateIndicator 不自管窗口）")
     func spriteDrivesOwnWindowPositionFalse() throws {
-        // Task 5 里 spec Step 5 说：activityStateIndicator → 位置固定但不走 drivesOwnWindowPosition true
-        // drivesOwnWindowPosition 派生公式：driveModel == .autonomousEngine || .selfAnimating
-        // activityStateIndicator 位置固定由帧循环 holdPetPosition 实现，不需要 renderer 自管窗口
+        // 派生公式：仅 driveModel == .autonomousEngine 为 true。activityStateIndicator 位置由帧循环
+        // holdPetPosition 固定、拖拽走 host adapter，不自管窗口 → false。
         let url = try makeSpriteFixture()
         let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
         #expect(r.drivesOwnWindowPosition == false)
+    }
+
+    // MARK: - drivesOwnWindowPosition 派生契约(用 mock 锁全部四态)
+
+    /// 最小 renderer，仅用来按 driveModel 验证 drivesOwnWindowPosition 派生。
+    final class DriveModelRenderer: PetRenderer {
+        let contentLayer: CALayer = CALayer()
+        private let model: PetDriveModel
+        init(_ model: PetDriveModel) { self.model = model }
+        var driveModel: PetDriveModel { model }
+        func updateForState(_ state: PetEmotionState) {}
+    }
+
+    @Test("autonomousEngine → drivesOwnWindowPosition true（仅引擎自管窗口）")
+    func autonomousEngineDrivesOwnWindowPositionTrue() {
+        #expect(DriveModelRenderer(.autonomousEngine).drivesOwnWindowPosition == true)
+    }
+
+    @Test("selfAnimating → drivesOwnWindowPosition false（Live2D 无引擎指针,拖拽走 host adapter）")
+    func selfAnimatingDrivesOwnWindowPositionFalse() {
+        // 回归守卫:曾误派生为 true → Live2D 拖拽事件被路由进 no-op handlePointerDown → 拖不动。
+        #expect(DriveModelRenderer(.selfAnimating).drivesOwnWindowPosition == false)
+    }
+
+    @Test("activityStateIndicator / proceduralMotion → drivesOwnWindowPosition false")
+    func otherDriveModelsDrivesOwnWindowPositionFalse() {
+        #expect(DriveModelRenderer(.activityStateIndicator).drivesOwnWindowPosition == false)
+        #expect(DriveModelRenderer(.proceduralMotion).drivesOwnWindowPosition == false)
     }
 }

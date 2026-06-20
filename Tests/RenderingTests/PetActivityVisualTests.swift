@@ -56,7 +56,7 @@ struct PetActivityVisualTests {
     func spriteUpdateForActivityIsNoOp() throws {
         let url = try makeSpriteFixture()
         let renderer = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
-        // 全部 7 态推入，不崩即通过（Task 3 才实现实际映射）
+        // 全部 7 态推入不崩即通过；实际「活动态→状态行」映射由 SpriteSheetPetRendererTests 验证
         renderer.updateForActivity(.idle)
         renderer.updateForActivity(.working)
         renderer.updateForActivity(.reviewing)

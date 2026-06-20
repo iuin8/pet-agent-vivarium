@@ -316,10 +316,12 @@ public extension PetRenderer {
     /// 其余 renderer 安全忽略推入的活动视觉态。
     func updateForActivity(_ visual: PetActivityVisual) {}
 
-    /// 由 `driveModel` 派生：引擎自驱（`.autonomousEngine`）或 Live2D 自驱（`.selfAnimating`）时
-    /// renderer 自管窗口位置；其余由 host 仲裁。
+    /// 由 `driveModel` 派生：**仅**引擎自驱（`.autonomousEngine`，自产 anchor + 摆窗 +
+    /// `handlePointerDown` 引擎抓起）时 renderer 自管窗口位置。其余（proceduralMotion /
+    /// activityStateIndicator / selfAnimating）位置由 host 仲裁、**拖拽走 host drag adapter**
+    /// —— selfAnimating(Live2D) 虽位置固定不漫步,但无引擎指针实现,拖拽须经 adapter,故 false。
     var drivesOwnWindowPosition: Bool {
-        driveModel == .autonomousEngine || driveModel == .selfAnimating
+        driveModel == .autonomousEngine
     }
 
     /// 默认 no-op。仅引擎驱动形象响应指针。
