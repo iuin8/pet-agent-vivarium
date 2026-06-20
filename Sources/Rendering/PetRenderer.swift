@@ -264,6 +264,11 @@ public protocol PetRenderer: AnyObject {
     /// 帧循环据此 switch 分发，取代 `as? ShimejiPetRenderer` 二元 cast。
     var driveModel: PetDriveModel { get }
 
+    /// 推入 agent 活动视觉态。仅 `.activityStateIndicator` 形象（如 petdex sprite）消费，
+    /// 其余 renderer 默认 no-op。App 接线层把 `AgentActivityState` 映射成 `PetActivityVisual`
+    /// 后调本方法，Rendering 层不直接依赖 AgentSensing。
+    func updateForActivity(_ visual: PetActivityVisual)
+
     /// renderer 是否**自管窗口位置**(每帧自产 anchor + 摆窗,如 Shimeji 引擎)。
     /// `true` → host PetMotionController / drag adapter 的位置驱动整段让位(否则与引擎抢窗)。
     /// 默认由 `driveModel` 派生：`.autonomousEngine` 或 `.selfAnimating` 时为 `true`。
@@ -306,6 +311,10 @@ public extension PetRenderer {
 
     /// 默认 `.proceduralMotion`。Orb/Slime/未声明 renderer 行为不变。
     var driveModel: PetDriveModel { .proceduralMotion }
+
+    /// 默认 no-op。仅 `.activityStateIndicator` 形象（如 petdex sprite）覆盖实现，
+    /// 其余 renderer 安全忽略推入的活动视觉态。
+    func updateForActivity(_ visual: PetActivityVisual) {}
 
     /// 由 `driveModel` 派生：引擎自驱（`.autonomousEngine`）或 Live2D 自驱（`.selfAnimating`）时
     /// renderer 自管窗口位置；其余由 host 仲裁。
