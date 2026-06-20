@@ -112,6 +112,9 @@ public final class SpriteSheetPetRenderer: PetRenderer {
 
     // MARK: - PetRenderer
 
+    /// petdex sprite 由 agent 活动态驱动状态行，位置由帧循环固定。
+    public var driveModel: PetDriveModel { .activityStateIndicator }
+
     public func updateForState(_ state: PetEmotionState) {
         currentState = state
         refreshLoopAnimation()

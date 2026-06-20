@@ -260,9 +260,13 @@ public protocol PetRenderer: AnyObject {
     /// renderer 自己决定。
     func trigger(_ signature: SignatureAction)
 
+    /// 本形象的运动驱动范式。默认 `.proceduralMotion`（host `PetMotionController` 仲裁）。
+    /// 帧循环据此 switch 分发，取代 `as? ShimejiPetRenderer` 二元 cast。
+    var driveModel: PetDriveModel { get }
+
     /// renderer 是否**自管窗口位置**(每帧自产 anchor + 摆窗,如 Shimeji 引擎)。
     /// `true` → host PetMotionController / drag adapter 的位置驱动整段让位(否则与引擎抢窗)。
-    /// 默认 `false`(Orb/sprite/Live2D 位置由 host 仲裁)。
+    /// 默认由 `driveModel` 派生：`.autonomousEngine` 或 `.selfAnimating` 时为 `true`。
     var drivesOwnWindowPosition: Bool { get }
 
     /// pet 窗口左键按下 → 交给 renderer(Shimeji 引擎转 Dragged 抓起跟手)。
@@ -300,8 +304,14 @@ public extension PetRenderer {
     /// 走到这里的实现都是自愿响应。
     func trigger(_ signature: SignatureAction) {}
 
-    /// 默认 false(host 仲裁位置)。仅 Shimeji 引擎形象覆盖为 true。
-    var drivesOwnWindowPosition: Bool { false }
+    /// 默认 `.proceduralMotion`。Orb/Slime/未声明 renderer 行为不变。
+    var driveModel: PetDriveModel { .proceduralMotion }
+
+    /// 由 `driveModel` 派生：引擎自驱（`.autonomousEngine`）或 Live2D 自驱（`.selfAnimating`）时
+    /// renderer 自管窗口位置；其余由 host 仲裁。
+    var drivesOwnWindowPosition: Bool {
+        driveModel == .autonomousEngine || driveModel == .selfAnimating
+    }
 
     /// 默认 no-op。仅引擎驱动形象响应指针。
     func handlePointerDown() {}
