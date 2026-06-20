@@ -55,22 +55,26 @@ struct SpriteSheetPetRendererTests {
         let url = try makeSparseSheet(cols: 8, rows: 9, frameW: 12, frameH: 13,
                                       filled: [1, 3, 3, 3, 2, 4, 2, 3, 4])
         let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
-        r.updateForMotion(.idle)              // idle def 6 帧,实 1 → 裁到 1(静止不闪)
+        // petdex sprite 默认 idle 行（chat 来源，idle 情绪态）
         #expect(r.currentRowForTesting == 0)
-        #expect(r.currentSequenceCountForTesting == 1)
-        r.updateForMotion(.walking(.right))   // running-right def 8 帧,实 3 → 裁到 3
-        #expect(r.currentRowForTesting == 1)
-        #expect(r.currentSequenceCountForTesting == 3)
+        #expect(r.currentSequenceCountForTesting == 1)  // idle def 6 帧,实 1 → 裁到 1(静止不闪)
+        // 活动态切 running(row7)
+        r.updateForActivity(.working)
+        #expect(r.currentRowForTesting == 7)
+        let runningCount = r.currentSequenceCountForTesting
+        // running def 6 帧,稀疏包 row7 实 3 帧 → 裁到 3
+        #expect(runningCount == 3)
     }
 
     @Test("满帧包(petdex 全列)→ play 不裁,保留 def 全部帧(零回归)")
     func fullSheetKeepsAllDefFrames() throws {
         let url = try makeSheet(width: 8 * 12, height: 9 * 13)   // 全填,每行 8 帧
         let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
-        r.updateForMotion(.idle)
-        #expect(r.currentSequenceCountForTesting == 6)          // idle def 6 帧全留
-        r.updateForMotion(.walking(.right))
-        #expect(r.currentSequenceCountForTesting == 8)          // running def 8 帧全留
+        // 初始 idle（chat 来源）→ idle def 6 帧全留
+        #expect(r.currentSequenceCountForTesting == 6)
+        // 活动态 working → running(row7)def 6 帧全留
+        r.updateForActivity(.working)
+        #expect(r.currentSequenceCountForTesting == 6)
     }
 
     @Test("合法 8×9 spritesheet → init 成功，view 有尺寸，支持招牌动作")
@@ -87,52 +91,48 @@ struct SpriteSheetPetRendererTests {
         renderer.resumeDisplayLink()
     }
 
-    @Test("8×9 无 climb 行 → climbing 回退 running 镜像(right=row1 / left=row2)")
-    func climbingFallsBackOnNineRowSheet() throws {
-        let url = try makeSheet(width: 8 * 12, height: 9 * 13)   // 几何推 9 行,无 climb 行
-        let renderer = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
-        renderer.updateForMotion(.climbing(.right))
-        #expect(renderer.currentRowForTesting == 1)              // 回退 runningRight
-        renderer.updateForMotion(.climbing(.left))
-        #expect(renderer.currentRowForTesting == 2)              // 回退 runningLeft
-    }
+    // 注：「8×9 无 climb 行 → climbing 回退 running 镜像」和
+    //     「8×10 有 climb 行 → climbing 走专用 row9」两个用例已删除。
+    // 删除原因：这两个测试验证的是「运动态（climbing）驱动状态行」的行为，
+    // 而该行为按设计已删除——petdex sprite 去漫步后 updateForMotion 退化为 no-op，
+    // row9/climbing 专用行逻辑随 effectiveNamed() 中的 switch currentMotion 一并移除。
+    // 属于对应实现行为按设计删除，非凑绿删测试。
 
-    @Test("8×10 有 climb 行 → climbing 走专用 row9(朝向靠 layer 翻转,行不变)")
-    func climbingUsesClimbRowOnTenRowSheet() throws {
-        let url = try makeSheet(width: 8 * 12, height: 10 * 13)  // 几何推 10 行,含 climb 行
-        let renderer = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
-        renderer.updateForMotion(.climbing(.right))
-        #expect(renderer.currentRowForTesting == 9)             // 专用 climb 行
-        renderer.updateForMotion(.climbing(.left))
-        #expect(renderer.currentRowForTesting == 9)             // 仍 row9(左墙靠水平翻转,非换行)
-    }
-
-    @Test("updateForMotion 走帧切行 —— 向右=row1 / 向左=row2 / 下落=row4")
-    func motionSwitchesWalkRows() throws {
+    @Test("updateForMotion 对 petdex sprite 退化为 no-op(不再覆盖状态行)")
+    func motionIsNoOpForSpriteRenderer() throws {
         let url = try makeSheet(width: 8 * 12, height: 9 * 13)
         let renderer = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
+        // 先推入活动态 working → running(row7)
+        renderer.updateForActivity(.working)
+        #expect(renderer.currentRowName == "running")
+        // 所有运动态调用都不改变行
         renderer.updateForMotion(.walking(.right))
-        #expect(renderer.currentRowForTesting == 1)
+        #expect(renderer.currentRowName == "running")
         renderer.updateForMotion(.walking(.left))
-        #expect(renderer.currentRowForTesting == 2)
+        #expect(renderer.currentRowName == "running")
         renderer.updateForMotion(.falling)
-        #expect(renderer.currentRowForTesting == 4)
+        #expect(renderer.currentRowName == "running")
+        renderer.updateForMotion(.climbing(.right))
+        #expect(renderer.currentRowName == "running")
+        renderer.updateForMotion(.idle)
+        #expect(renderer.currentRowName == "running")
     }
 
-    @Test("运动态 idle 回落到情绪态行(idle=row0, thinking=row8 review)")
-    func motionIdleFallsBackToEmotion() throws {
+    @Test("updateForState 不经运动态直接决定行(chat 来源)")
+    func updateForStateDrivesRowDirectly() throws {
         let url = try makeSheet(width: 8 * 12, height: 9 * 13)
         let renderer = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
-        renderer.updateForMotion(.walking(.right))   // 先走起来 → row1
-        #expect(renderer.currentRowForTesting == 1)
-        renderer.updateForMotion(.idle)              // 停 → 回落情绪态 idle = row0
+        // 初始 idle
         #expect(renderer.currentRowForTesting == 0)
-        renderer.updateForState(.thinking)           // 情绪 thinking → review row8
+        // 情绪态 thinking → review(row8)
+        renderer.updateForState(.thinking)
         #expect(renderer.currentRowForTesting == 8)
-        renderer.updateForMotion(.walking(.left))    // 又走 → 运动态优先 row2
-        #expect(renderer.currentRowForTesting == 2)
-        renderer.updateForMotion(.idle)              // 停 → 回落到 thinking row8(情绪态保留)
-        #expect(renderer.currentRowForTesting == 8)
+        // 情绪态 confused → failed(row5)
+        renderer.updateForState(.confused)
+        #expect(renderer.currentRowForTesting == 5)
+        // 运动态不影响
+        renderer.updateForMotion(.walking(.right))
+        #expect(renderer.currentRowForTesting == 5)
     }
 
     @Test("updateForWetness 驱动水渍层不透明度(干=0,湿>0,clamp)")
@@ -190,6 +190,65 @@ struct SpriteSheetPetRendererTests {
         for e in entries {
             #expect(e.identity.id.hasPrefix("codex:"))
         }
+    }
+
+    // MARK: - 活动态驱动状态行（Task 3 新增）
+
+    @Test("updateForActivity 7 种活动态各映射正确 petdex 状态行")
+    func activityMapsToCorrectRows() throws {
+        let url = try makeSheet(width: 8 * 12, height: 9 * 13)
+        let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
+        r.updateForActivity(.working)
+        #expect(r.currentRowName == "running")      // row7
+        r.updateForActivity(.reviewing)
+        #expect(r.currentRowName == "review")       // row8
+        r.updateForActivity(.talking)
+        #expect(r.currentRowName == "waving")       // row3
+        r.updateForActivity(.waiting)
+        #expect(r.currentRowName == "waiting")      // row6
+        r.updateForActivity(.celebrating)
+        #expect(r.currentRowName == "jumping")      // row4
+        r.updateForActivity(.failed)
+        #expect(r.currentRowName == "failed")       // row5
+        r.updateForActivity(.idle)
+        #expect(r.currentRowName == "idle")         // row0
+    }
+
+    @Test("most-recent-wins: activity 后再 updateForState → chat 来源赢")
+    func mostRecentWinsChatAfterActivity() throws {
+        let url = try makeSheet(width: 8 * 12, height: 9 * 13)
+        let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
+        r.updateForActivity(.working)               // activity 来源 → running(row7)
+        #expect(r.currentRowName == "running")
+        r.updateForState(.thinking)                 // chat 来源最新 → review(row8)
+        #expect(r.currentRowName == "review")
+    }
+
+    @Test("most-recent-wins: updateForState 后再 updateForActivity → activity 来源赢")
+    func mostRecentWinsActivityAfterChat() throws {
+        let url = try makeSheet(width: 8 * 12, height: 9 * 13)
+        let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
+        r.updateForState(.thinking)                 // chat 来源 → review(row8)
+        #expect(r.currentRowName == "review")
+        r.updateForActivity(.waiting)               // activity 来源最新 → waiting(row6)
+        #expect(r.currentRowName == "waiting")
+    }
+
+    @Test("初始无活动推入时行由聊天态决定(默认 chat 来源)")
+    func defaultsToChat() throws {
+        let url = try makeSheet(width: 8 * 12, height: 9 * 13)
+        let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
+        // 无任何 updateForActivity → chat 来源，默认情绪 idle = row0
+        #expect(r.currentRowName == "idle")
+        r.updateForState(.confused)
+        #expect(r.currentRowName == "failed")       // confused → failed(row5)
+    }
+
+    @Test("driveModel 声明为 activityStateIndicator")
+    func driveModelIsActivityStateIndicator() throws {
+        let url = try makeSheet(width: 8 * 12, height: 9 * 13)
+        let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
+        #expect(r.driveModel == .activityStateIndicator)
     }
 
     /// 离屏渲染验证：把 renderer 的 layer 画进 bitmap，断言真有非透明像素落上去。

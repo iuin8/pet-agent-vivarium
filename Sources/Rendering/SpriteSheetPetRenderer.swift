@@ -28,8 +28,6 @@ public final class SpriteSheetPetRenderer: PetRenderer {
     private let frameH: CGFloat
     /// 本 sheet 实际行数(几何推导:经典 8×9 → 9;带 climb 的 8×10 → 10)。
     private let sheetRows: Int
-    /// 是否含专用 climb 行(row 9)。无则 `.climbing` 回退 running 镜像。
-    private let hasClimbRow: Bool
     /// 每行实际非空帧数(从 col 0 起连续计)。Shimeji 转换包按映射表填,每行帧数常 < petdex
     /// STATES 假定的列数(如 idle 实 1 帧 vs def 播 6 帧)→ 播到透明空 cell 会「一帧有一帧无」闪烁。
     /// 据此把 play 帧序裁到真实帧、空 cell 不播(根治闪烁,且兼容任意稀疏社区包)。
@@ -58,9 +56,12 @@ public final class SpriteSheetPetRenderer: PetRenderer {
     private var currentFrameRow = 0
     private var currentFrameCol = 0
     private var currentState: PetEmotionState = .idle
-    /// 当前空间运动态(walking 朝向 / idle / falling / perching)。
-    /// 与情绪态(`currentState`)正交:运动态(走/落)优先,静止/perch 回落到情绪态。
-    private var currentMotion: PetMotionPhase = .idle
+    /// 状态行来源:哪个通道最后被更新,行就由它决定(most-recent-wins)。
+    /// 默认 `.chat`(无 agent 活动时同现有聊天态行为)。
+    private enum RowSource { case chat, activity }
+    private var rowSource: RowSource = .chat
+    /// 当前活动视觉态(由 agent 活动推入)。
+    private var activity: PetActivityVisual = .idle
     /// 正在播一次性招牌动作(`trigger`)—— 此间 motion/emotion 变化只记录不打断,
     /// 招牌播完再 `refreshLoopAnimation` 回到当前态。
     private var playingOneShot = false
@@ -82,7 +83,6 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         self.sheet = cg
         let rows = SpritePackGeometry.rows(width: cg.width, height: cg.height)
         self.sheetRows = rows
-        self.hasClimbRow = rows >= 10
         self.frameW = CGFloat(cg.width) / CGFloat(Self.cols)
         self.frameH = CGFloat(cg.height) / CGFloat(rows)
         self.frameCounts = Self.detectFrameCounts(sheet: cg, cols: Self.cols, rows: rows)
@@ -117,26 +117,21 @@ public final class SpriteSheetPetRenderer: PetRenderer {
 
     public func updateForState(_ state: PetEmotionState) {
         currentState = state
+        rowSource = .chat   // 聊天态更新 → 切回 chat 来源
         refreshLoopAnimation()
     }
 
-    /// 接 `PetMotionController` 每帧运动态。走/落切走帧行,静止/perch
-    /// 回落情绪态。每帧调用,但 `refreshLoopAnimation` 只在行真变化时重播。
+    /// petdex sprite 不漫步——`updateForMotion` 退化为 no-op。
+    /// petdex 官方驱动是 agent 活动态（`updateForActivity`），不由空间运动仲裁行选择。
     public func updateForMotion(_ phase: PetMotionPhase) {
-        currentMotion = phase
-        applyClimbFlip(for: phase)
-        refreshLoopAnimation()
+        // no-op：petdex 不漫步，运动态不参与行选择
     }
 
-    /// climb 行源帧面右;`climbing(.left)`(贴右墙、面左)时水平翻转 spriteLayer 镜像之。
-    /// 仅 climb 用翻转(running-left 是独立烘焙行,不翻);离开 climb 复位,否则其他行被镜像。
-    private func applyClimbFlip(for phase: PetMotionPhase) {
-        var flip = false
-        if case .climbing(.left) = phase, hasClimbRow { flip = true }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        spriteLayer.transform = flip ? CATransform3DMakeScale(-1, 1, 1) : CATransform3DIdentity
-        CATransaction.commit()
+    /// 推入 agent 活动视觉态 → 切换状态行（most-recent-wins：activity 来源）。
+    public func updateForActivity(_ visual: PetActivityVisual) {
+        activity = visual
+        rowSource = .activity
+        refreshLoopAnimation()
     }
 
     /// 淋湿程度 0..1 → 蓝色水渍层不透明度。每帧调用,无隐式动画
@@ -233,9 +228,9 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         }
     }
 
-    // MARK: - 循环动画仲裁(运动态优先于情绪态)
+    // MARK: - 循环动画仲裁(活动态/情绪态按最近更新来源)
 
-    /// 据当前运动态 + 情绪态算出该循环播放的状态行,只在它变化时重播。
+    /// 据当前来源(活动态 or 聊天态)算出应循环播放的状态行,只在它变化时重播。
     private func refreshLoopAnimation() {
         guard !paused, !playingOneShot else { return }
         let named = effectiveNamed()
@@ -244,17 +239,27 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         play(named: named, loop: true)
     }
 
-    /// 运动态(走/落)优先;静止 / perch 回落到情绪态行。
+    /// most-recent-wins：哪个通道最后更新，行就由它决定。
+    /// activity 来源 → 活动视觉态映射；chat 来源 → 情绪态映射。
     private func effectiveNamed() -> NamedState {
-        switch currentMotion {
-        case .walking(.right): return .runningRight
-        case .walking(.left):  return .runningLeft
-        case .climbing(let facing):
-            // 有专用 climb 行(8×10 包,如 Shimeji shime12-14)→ 走真攀爬帧(朝向靠 layer 翻转);
-            // 经典 8×9 包无 climb 行 → 回退 running 帧镜像。
-            return hasClimbRow ? .climbing : (facing == .right ? .runningRight : .runningLeft)
-        case .falling:         return .jumping   // 空中姿态(petdex 无独立 falling 行)
-        case .perching, .idle: return Self.namedState(for: currentState)
+        switch rowSource {
+        case .activity: return Self.namedState(forActivity: activity)
+        case .chat:     return Self.namedState(for: currentState)
+        }
+    }
+
+    /// agent 活动视觉态 → petdex 状态行（对齐 petdex pet-states.ts 行约定）。
+    /// working→running(row7) / reviewing→review(row8) / talking→waving(row3)
+    /// / waiting→waiting(row6) / celebrating→jumping(row4) / failed→failed(row5) / idle→idle(row0)
+    private static func namedState(forActivity visual: PetActivityVisual) -> NamedState {
+        switch visual {
+        case .working:     return .running
+        case .reviewing:   return .review
+        case .talking:     return .waving
+        case .waiting:     return .waiting
+        case .celebrating: return .jumping
+        case .failed:      return .failed
+        case .idle:        return .idle
         }
     }
 
@@ -265,6 +270,23 @@ public final class SpriteSheetPetRenderer: PetRenderer {
 
     /// 测试钩子(@testable):当前播放序列帧数(已裁到本行真实非空帧 → 验证稀疏包不播空帧防闪烁)。
     var currentSequenceCountForTesting: Int { sequence.count }
+
+    /// 测试钩子(@testable):当前循环播放的状态行名称(用于断言活动态映射)。
+    var currentRowName: String {
+        guard let named = activeNamed else { return "none" }
+        switch named {
+        case .idle:         return "idle"
+        case .runningRight: return "runningRight"
+        case .runningLeft:  return "runningLeft"
+        case .waving:       return "waving"
+        case .jumping:      return "jumping"
+        case .failed:       return "failed"
+        case .waiting:      return "waiting"
+        case .running:      return "running"
+        case .review:       return "review"
+        case .climbing:     return "climbing"
+        }
+    }
 
     // MARK: - Playback
 
