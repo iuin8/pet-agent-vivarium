@@ -60,15 +60,15 @@ public struct PetMotionInput: Sendable, Equatable {
     public let deltaTime: Double
     /// 光标世界坐标。
     public let cursorPosition: Point
-    /// 当前可见窗口矩形(已过滤壁纸窗口、已翻成底原点)。爬窗用;跟随 / 漫步态可空。
+    /// 当前可见窗口矩形(已过滤壁纸窗口、已翻成底原点)。爬墙用;跟随 / 漫步态可空。
     public let windows: [Rect]
     /// 可活动的屏幕边界(底原点 y-up)。漫步 clamp / 回落地面用。
     public let screenBounds: Rect
-    /// 用户最后一次键鼠输入距今秒数(0 = 刚活跃)。漫步 / 爬窗触发阈值。
+    /// 用户最后一次键鼠输入距今秒数(0 = 刚活跃)。漫步 / 爬墙触发阈值。
     public let idleSeconds: Double
     /// 「跟随光标」开关:开 → 用户活跃时 pet 追光标;关 → 不追(原地或纯漫游)。
     public let followingEnabled: Bool
-    /// 「桌面漫游」开关:开 → pet 自主漫步 + 爬窗(跟随关 → 连续漫游;跟随开 → 空闲才漫游)。
+    /// 「桌面漫游」开关:开 → pet 自主漫步 + 爬墙(跟随关 → 连续漫游;跟随开 → 空闲才漫游)。
     public let roamingEnabled: Bool
     /// 活跃度 0..1(由 pet 情绪态推:happy/talking 高、calm/thinking 低)。给自主漫步加情绪:
     /// 高 → 暂停短、走得快(活泼);低 → 暂停长、走得慢(慵懒)。默认 0.5 中性。参考 GodotDesktopPet

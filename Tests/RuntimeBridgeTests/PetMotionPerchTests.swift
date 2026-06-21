@@ -2,10 +2,10 @@ import Testing
 @testable import RuntimeBridge
 import Context
 
-// MARK: - PetMotionController 爬窗测试
+// MARK: - PetMotionController 爬墙 / 栖息测试
 //
-// 爬窗:漫步到窗口下方暂停时按概率爬上窗口顶边(snap),x/y 跟随窗口移动;窗口
-// 关闭/移走 → 解除 → 落回地面。坐标系:窗口矩形底原点,与 pet 位置同系。
+// 爬墙:漫步越过可爬窗口的左/右侧边 → 沿侧边逐帧攀爬到顶 → 栖息锚定窗口顶边,
+// x/y 跟随窗口移动;窗口关闭/移走 → 解除 → 落回地面。坐标系:窗口矩形底原点,与 pet 位置同系。
 
 private let dt = 1.0 / 60.0
 private let bounds = Rect(origin: Point(x: 0, y: 100), width: 1000, height: 700)

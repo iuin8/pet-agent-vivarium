@@ -6,24 +6,24 @@ import Context
 /// ## 职责
 ///
 /// pet 位置有两种 regime:物理回落(跟光标 / 拖拽释放)vs 行为驱动(漫步 /
-/// 爬窗)。本控制器每帧:
-/// 1. 仲裁出 `PetMotionMode`(physics / roaming / perched / dragged);
-/// 2. 据模式算最终位置(physics 透传候选,roaming/perched 自行算);
+/// 爬墙)。本控制器每帧:
+/// 1. 仲裁出 `PetMotionMode`(physics / roaming / climbing / perched / dragged);
+/// 2. 据模式算最终位置(physics 透传候选,roaming/climbing/perched 自行算);
 /// 3. 据 `previousPosition → 最终位置` 的位移算 `PetMotionPhase`。
 ///
 /// ## 模式
 ///
 /// - `.physics`:透传上游 cursor-follow 候选(零回归)。
 /// - `.roaming`:空闲 → 重力降到可见地面 → 沿地面走向随机路点 + 暂停。
-/// - `.perched`:漫步到窗口下方暂停时按概率爬上窗口顶边,x/y 跟随窗口移动;
-///   窗口关闭/移走 → 解除 → 落回地面。爬升过程降级为瞬移到位(完整
-///   攀爬动画需更多帧,留后续)。
+/// - `.climbing`:漫步越过可爬窗口的左/右侧边时按概率沿侧边逐帧向上攀爬
+///   (墙 = 窗口竖边 / 屏幕边),到顶转 `.perched`。
+/// - `.perched`:锚定窗口顶边,x/y 跟随窗口移动;窗口关闭/移走 → 解除 → 落回地面。
 /// - `.dragged`:由 Shell 拖拽路径直接驱动(短路帧循环),控制器不参与。
 ///
 /// ## 位置无状态 + 纯函数式
 ///
 /// 控制器不存 pet 位置(权威源是 App `currentRenderState`,拖拽/不跟随也准),每帧
-/// 由调用方传 `previousPosition` → 免 staleness。只持有 `mode` + 漫步/爬窗自身演进态
+/// 由调用方传 `previousPosition` → 免 staleness。只持有 `mode` + 漫步/爬墙自身演进态
 /// (路点 / 暂停计时 / 所站窗口矩形 / PRNG)。`resolved` 不就地变更,返回新 controller。
 public struct PetMotionController: Sendable, Equatable {
     /// 当前模式(上一帧仲裁结果)。
@@ -33,7 +33,7 @@ public struct PetMotionController: Sendable, Equatable {
     private var roamTargetX: Double?
     /// 漫步路点间暂停剩余秒。
     private var roamPauseRemaining: Double
-    /// 当前所站窗口矩形(底原点,与 pet 位置同系)。`nil` = 未爬窗。逐帧按邻近度重匹配跟随。
+    /// 当前所站窗口矩形(底原点,与 pet 位置同系)。`nil` = 未栖息。逐帧按邻近度重匹配跟随。
     private var perchedRect: Rect?
     /// 正在沿侧边攀爬的窗口(逐帧上升的窗口攀爬)。`nil` = 未攀爬。到顶转 `perchedRect`,窗口没了 → 落回。
     private var climbingRect: Rect?
@@ -46,7 +46,7 @@ public struct PetMotionController: Sendable, Equatable {
     private var screenEdgeClimb: Bool
     /// 屏幕边攀爬的目标吸附高度(y)。窗口攀爬用 `climbingRect` 顶边,不读此值。
     private var climbTopY: Double
-    /// 选路点 / 爬窗概率用的确定性 PRNG。
+    /// 选路点 / 爬墙概率用的确定性 PRNG。
     private var rng: PetMotionRandom
 
     // MARK: - 调参常数
@@ -120,9 +120,9 @@ public struct PetMotionController: Sendable, Equatable {
 
     // MARK: - 模式 + 位置仲裁
 
-    /// 仲裁优先级:跟随追光标(活跃) > 续站 > 漫步/爬窗。两个开关解耦:
+    /// 仲裁优先级:跟随追光标(活跃) > 续站 > 漫步/爬墙。两个开关解耦:
     /// - 跟随开 + 用户活跃 → 追光标(physics 透传候选)。
-    /// - 漫游开 → 自主漫步/爬窗:跟随**关**时连续漫游(用户显式要「自由漫步」),
+    /// - 漫游开 → 自主漫步/爬墙:跟随**关**时连续漫游(用户显式要「自由漫步」),
     ///   跟随**开**时仅用户空闲 ≥ 阈值才漫游(活跃时优先追光标,避免两者打架)。
     /// - 都不触发 → physics 兜底:跟随开停在光标候选,否则原地不动。
     private mutating func decide(
@@ -131,7 +131,7 @@ public struct PetMotionController: Sendable, Equatable {
         input: PetMotionInput
     ) -> (PetMotionMode, Point) {
         let userActive = input.idleSeconds < Self.roamThresholdSeconds
-        // 跟随开 + 活跃 → 追光标,清空溜达/爬窗态。
+        // 跟随开 + 活跃 → 追光标,清空溜达/爬墙态。
         if input.followingEnabled && userActive {
             clearTransientState()
             return (.physics, candidate)
@@ -214,7 +214,7 @@ public struct PetMotionController: Sendable, Equatable {
         clearTransientState()
     }
 
-    // MARK: - 漫步积分 + 爬窗触发
+    // MARK: - 漫步积分 + 爬墙触发
 
     private enum RoamOutcome {
         case walk(Point)
@@ -304,7 +304,7 @@ public struct PetMotionController: Sendable, Equatable {
         return best
     }
 
-    // MARK: - 爬窗几何(纯函数)
+    // MARK: - 爬墙几何(纯函数)
 
     /// 逐帧跟踪:在当前窗口列表里找与上帧所站矩形最接近的(origin 位移 + 尺寸变化
     /// 均在容差内)。找不到 → 窗口关了/移走了 → 返回 nil(触发落回地面)。
@@ -334,7 +334,7 @@ public struct PetMotionController: Sendable, Equatable {
     // MARK: - 运动态派生
 
     /// 据帧间位移算运动态。漫步的下落/行走/暂停由位移自然落到 falling/walking/idle;
-    /// 爬窗(perched)恒 `.perching`(站立,sprite 走 idle/sit 帧)。
+    /// 栖息(perched)恒 `.perching`(站立,sprite 走 idle/sit 帧)。
     static func phase(from: Point, to: Point, mode: PetMotionMode) -> PetMotionPhase {
         if mode == .perched {
             return .perching

@@ -6,7 +6,7 @@ import Context
 //
 // 不变式:仲裁恒为 .physics(透传上游候选)→ 位置零回归;运动态 phase
 // 据 previousPosition → 最终位置 的位移正确派生(walking 朝向 / idle / falling)。
-// 控制器位置无状态:phase 基准由调用方每帧传入(免 staleness)。漫步 / 爬窗
+// 控制器位置无状态:phase 基准由调用方每帧传入(免 staleness)。漫步 / 爬墙
 // 行为的测试见对应测试文件。
 
 @Test("physics 模式透传候选位置,模式恒为 .physics")
