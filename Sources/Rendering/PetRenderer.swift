@@ -271,7 +271,8 @@ public protocol PetRenderer: AnyObject {
 
     /// renderer 是否**自管窗口位置**(每帧自产 anchor + 摆窗,如 Shimeji 引擎)。
     /// `true` → host PetMotionController / drag adapter 的位置驱动整段让位(否则与引擎抢窗)。
-    /// 默认由 `driveModel` 派生：`.autonomousEngine` 或 `.selfAnimating` 时为 `true`。
+    /// 默认由 `driveModel` 派生:**仅 `.autonomousEngine` 为 `true`**(selfAnimating/activityStateIndicator
+    /// 位置固定但无引擎指针实现,拖拽须走 host adapter,故 false)。
     var drivesOwnWindowPosition: Bool { get }
 
     /// pet 窗口左键按下 → 交给 renderer(Shimeji 引擎转 Dragged 抓起跟手)。
