@@ -43,6 +43,9 @@ public final class SpriteSheetPetRenderer: PetRenderer {
     private var wetness: Float = 0
 
     private var frameTimer: Timer?
+    /// 空闲小动作计时器。**PetAgent 桌宠个性层(非 petdex)** —— petdex sprite 的 idle 原汁原味就是
+    /// 呼吸+眨眼循环、无 fidget;这是本仓给纯待机加的偶发小跳,让久挂不死板。可删(不影响活动态/petdex 忠实)。
+    private var idleFidgetTimer: Timer?
     private var sequence: [Frame] = []
     private var frameIndex = 0
     /// 当前帧裁剪后的 CGImage（showFrame 写）—— alpha occluder mask 提取复用，免重裁。
@@ -106,9 +109,10 @@ public final class SpriteSheetPetRenderer: PetRenderer {
 
         activeNamed = .idle
         play(named: .idle, loop: true)
+        scheduleIdleFidget()
     }
 
-    deinit { frameTimer?.invalidate() }
+    deinit { frameTimer?.invalidate(); idleFidgetTimer?.invalidate() }
 
     // MARK: - PetRenderer
 
@@ -202,6 +206,8 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         paused = true
         frameTimer?.invalidate()
         frameTimer = nil
+        idleFidgetTimer?.invalidate()
+        idleFidgetTimer = nil
     }
 
     public func resumeDisplayLink() {
@@ -212,7 +218,7 @@ public final class SpriteSheetPetRenderer: PetRenderer {
     }
 
     public var supportedSignatures: Set<SignatureAction> {
-        [.celebrate, .greet, .acknowledge, .refuse, .reactToDragEnd]
+        [.celebrate, .greet, .acknowledge, .refuse, .reactToDragEnd, .signatureIdle]
     }
 
     public func trigger(_ signature: SignatureAction) {
@@ -237,6 +243,21 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         guard named != activeNamed else { return }
         activeNamed = named
         play(named: named, loop: true)
+        // 进 idle → 排空闲小动作;离 idle(有活动/情绪)→ 撤掉。
+        if named == .idle { scheduleIdleFidget() } else { idleFidgetTimer?.invalidate(); idleFidgetTimer = nil }
+    }
+
+    /// 排一个偶发空闲小动作(**PetAgent 桌宠个性,非 petdex**):久挂 idle 时随机 22–48s 后小跳一下,
+    /// 跳完 `refreshLoopAnimation` 回 idle 并重排下一次。有活动/聊天打断即撤。可整段删,不影响 petdex 忠实。
+    private func scheduleIdleFidget() {
+        idleFidgetTimer?.invalidate()
+        let interval = TimeInterval.random(in: 22...48)
+        idleFidgetTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {   // Timer 回调 Sendable,@MainActor 状态用 assumeIsolated hop(同 schedule)
+                guard let self, self.activeNamed == .idle, !self.playingOneShot, !self.paused else { return }
+                self.trigger(.signatureIdle)   // 一次性小跳;完成回调 refreshLoopAnimation → 回 idle → 重排
+            }
+        }
     }
 
     /// most-recent-wins：哪个通道最后更新，行就由它决定。
@@ -414,7 +435,7 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         case .acknowledge: return .waving
         case .refuse:      return .failed
         case .reactToDragEnd: return .failed   // item1:被拖完「晕」一下(复用 failed 行)
-        case .signatureIdle: return nil
+        case .signatureIdle: return .jumping   // 空闲小动作:复用 jumping 行的一次性小跳(PetAgent 个性层)
         }
     }
 }

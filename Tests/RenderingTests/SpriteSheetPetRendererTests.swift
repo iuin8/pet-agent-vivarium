@@ -272,4 +272,12 @@ struct SpriteSheetPetRendererTests {
         for i in stride(from: 0, to: w * h * 4, by: 4) where pixels[i + 3] > 0 { opaque += 1 }
         #expect(opaque > 0, "sprite layer 渲染出全透明 → 没画出帧")
     }
+
+    @Test("空闲小动作:supportedSignatures 含 signatureIdle + trigger 不崩")
+    func idleFidgetSignatureSupported() throws {
+        let url = try makeSheet(width: 96, height: 117)          // 8×9 标准包
+        let r = try #require(SpriteSheetPetRenderer(spritesheetURL: url))
+        #expect(r.supportedSignatures.contains(.signatureIdle))  // 渲染器声明支持空闲小动作(PetAgent 个性层)
+        r.trigger(.signatureIdle)                                // 触发不崩(复用 jumping 行一次性小跳)
+    }
 }
