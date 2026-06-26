@@ -94,6 +94,10 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         spriteLayer.contentsGravity = .resizeAspect
         spriteLayer.magnificationFilter = .nearest   // 像素感
         spriteLayer.minificationFilter = .nearest
+        // 整张 sheet 一次性设为 contents → CA 缓存为后备 surface;逐帧只改 contentsRect
+        // (合成器侧 UV 裁切,零拷贝)。`cropping(to:)` 子图无法被 CA 缓存,每次 commit 触发
+        // CA::Render::copy_image 重拷(实测 idle 占主线程做功 ~70% / 单核 ~25%)。详见 changelog。
+        spriteLayer.contents = sheet
 
         // 淋湿:蓝色 tint 层 + sprite alpha mask(只染 pet 像素),初始全透明(干)。
         wetTintLayer.frame = spriteLayer.bounds
@@ -104,6 +108,7 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         wetMaskLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         wetMaskLayer.contentsGravity = .resizeAspect   // 与 spriteLayer 对齐
         wetMaskLayer.magnificationFilter = .nearest
+        wetMaskLayer.contents = sheet   // 同 spriteLayer:整张 sheet + contentsRect 选帧,免每帧重拷
         wetTintLayer.mask = wetMaskLayer
         spriteLayer.addSublayer(wetTintLayer)
 
@@ -359,14 +364,21 @@ public final class SpriteSheetPetRenderer: PetRenderer {
     private func showFrame() {
         guard frameIndex < sequence.count else { return }
         let f = sequence[frameIndex]
-        // CGImage top-left 原点：行 0 在最上。
+        // 帧选择走 contentsRect(归一化 UV,合成器侧裁切,零拷贝);contents=整张 sheet 已在 init 设好被 CA 缓存。
+        // 单位坐标:x 左→右 = col/cols;y = row/rows(顶左原点,与 CGImage 行 0 在最上一致)。
+        // setDisableActions:contentsRect 默认会触发隐式动画 → 帧间滑动 smear,必须关。
+        let nw = 1.0 / CGFloat(Self.cols)
+        let nh = 1.0 / CGFloat(sheetRows)
+        let cr = CGRect(x: CGFloat(f.col) * nw, y: CGFloat(f.row) * nh, width: nw, height: nh)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        spriteLayer.contentsRect = cr
+        wetMaskLayer.contentsRect = cr   // 湿渍 mask 跟随当前帧,蓝色 tint 裁在当前 pet 轮廓上
+        CATransaction.commit()
+        // alpha occluder mask(喂 falling-sand,雪开时才用)仍需当前帧独立裁切图。
+        // cropping(to:) 是惰性引用、无像素拷贝;真正展平只在 extractAlpha 内按帧缓存发生。
         let rect = CGRect(x: CGFloat(f.col) * frameW, y: CGFloat(f.row) * frameH, width: frameW, height: frameH)
-        let cropped = sheet.cropping(to: rect)
-        spriteLayer.contents = cropped
-        // 湿渍 mask 跟随当前帧,蓝色 tint 始终裁在当前 pet 轮廓上。
-        wetMaskLayer.contents = cropped
-        // 记录当前帧（裁剪图 + 行列标识）供 alpha occluder mask 提取 + 缓存。
-        currentCropped = cropped
+        currentCropped = sheet.cropping(to: rect)
         currentFrameRow = f.row
         currentFrameCol = f.col
     }
