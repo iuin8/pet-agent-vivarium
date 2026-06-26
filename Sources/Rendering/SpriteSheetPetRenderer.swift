@@ -50,6 +50,10 @@ public final class SpriteSheetPetRenderer: PetRenderer {
     private var frameIndex = 0
     /// 当前帧裁剪后的 CGImage（showFrame 写）—— alpha occluder mask 提取复用，免重裁。
     private var currentCropped: CGImage?
+    /// 逐帧「独立位图」缓存（key = row*cols+col）。把 sheet 裁出的子图展平成独立位图,CA 能缓存其 surface
+    /// → 既免每 commit `copy_image`（裸 `cropping` 子图非独立、不可缓存,每帧重拷）,又保持小 surface
+    /// （单帧 192×208,非整张 sheet）→ 拖动重绘 re-prep 快、不会 >1 帧透明。上界 = rows×cols(~72 张),按需 lazy 建。
+    private var frameImageCache: [Int: CGImage] = [:]
     /// alpha occluder mask 缓存：按当前帧标识 + mask 尺寸缓存，帧不变则直接返回（每行就几帧）。
     /// key 用 maskW/H（已由 cellSize 推导）而非 cellSize 原值 —— cellSize 运行时恒定
     /// （`fallingSandCellSize`），尺寸相同即可安全复用；接入可变 cellSize 时需把它纳入 key。
@@ -94,10 +98,10 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         spriteLayer.contentsGravity = .resizeAspect
         spriteLayer.magnificationFilter = .nearest   // 像素感
         spriteLayer.minificationFilter = .nearest
-        // 整张 sheet 一次性设为 contents → CA 缓存为后备 surface;逐帧只改 contentsRect
-        // (合成器侧 UV 裁切,零拷贝)。`cropping(to:)` 子图无法被 CA 缓存,每次 commit 触发
-        // CA::Render::copy_image 重拷(实测 idle 占主线程做功 ~70% / 单核 ~25%)。详见 changelog。
-        spriteLayer.contents = sheet
+        // contents 由 `showFrame` 逐帧设为「当前帧的独立位图」(见 `frameImageCache` / `standaloneFrameImage`):
+        // 独立位图 → CA 缓存其 surface → 不再每 commit `copy_image` 重拷(根治 idle 主线程 ~70% 做功);
+        // 小尺寸(单帧 192×208,非整张 sheet 1536×1872)→ 拖动重绘时 backing re-prep 快,不会 >1 帧透明
+        // (整张 sheet + contentsRect 方案实测「拖动松手闪一下消失」即源于大 surface 重建慢)。详见 changelog/lessons-learned。
 
         // 淋湿:蓝色 tint 层 + sprite alpha mask(只染 pet 像素),初始全透明(干)。
         wetTintLayer.frame = spriteLayer.bounds
@@ -108,7 +112,7 @@ public final class SpriteSheetPetRenderer: PetRenderer {
         wetMaskLayer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         wetMaskLayer.contentsGravity = .resizeAspect   // 与 spriteLayer 对齐
         wetMaskLayer.magnificationFilter = .nearest
-        wetMaskLayer.contents = sheet   // 同 spriteLayer:整张 sheet + contentsRect 选帧,免每帧重拷
+        // wetMask 的 contents 同样由 showFrame 逐帧设(跟随当前帧轮廓)。
         wetTintLayer.mask = wetMaskLayer
         spriteLayer.addSublayer(wetTintLayer)
 
@@ -364,23 +368,37 @@ public final class SpriteSheetPetRenderer: PetRenderer {
     private func showFrame() {
         guard frameIndex < sequence.count else { return }
         let f = sequence[frameIndex]
-        // 帧选择走 contentsRect(归一化 UV,合成器侧裁切,零拷贝);contents=整张 sheet 已在 init 设好被 CA 缓存。
-        // 单位坐标:x 左→右 = col/cols;y = row/rows(顶左原点,与 CGImage 行 0 在最上一致)。
-        // setDisableActions:contentsRect 默认会触发隐式动画 → 帧间滑动 smear,必须关。
-        let nw = 1.0 / CGFloat(Self.cols)
-        let nh = 1.0 / CGFloat(sheetRows)
-        let cr = CGRect(x: CGFloat(f.col) * nw, y: CGFloat(f.row) * nh, width: nw, height: nh)
+        // 逐帧设「当前帧独立位图」(缓存,见 frameImageCache):小 surface(拖动重绘不闪)+ 独立位图(免 copy_image)。
+        guard let img = standaloneFrameImage(col: f.col, row: f.row) else { return }
         CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        spriteLayer.contentsRect = cr
-        wetMaskLayer.contentsRect = cr   // 湿渍 mask 跟随当前帧,蓝色 tint 裁在当前 pet 轮廓上
+        CATransaction.setDisableActions(true)   // 帧切换瞬时,关隐式动画(防 contents 交叉淡入)
+        spriteLayer.contents = img
+        wetMaskLayer.contents = img   // 湿渍 mask 跟随当前帧,蓝色 tint 裁在当前 pet 轮廓上
         CATransaction.commit()
-        // alpha occluder mask(喂 falling-sand,雪开时才用)仍需当前帧独立裁切图。
-        // cropping(to:) 是惰性引用、无像素拷贝;真正展平只在 extractAlpha 内按帧缓存发生。
-        let rect = CGRect(x: CGFloat(f.col) * frameW, y: CGFloat(f.row) * frameH, width: frameW, height: frameH)
-        currentCropped = sheet.cropping(to: rect)
+        currentCropped = img   // alpha occluder mask(喂 falling-sand,雪开时才用)复用当前帧位图
         currentFrameRow = f.row
         currentFrameCol = f.col
+    }
+
+    /// 当前帧的「独立位图」(首次按 row/col 展平 + 缓存,之后命中缓存)。`sheet.cropping(to:)` 的子图
+    /// 共享父图 provider、非独立 → CA 每 commit 都 `copy_image` 重拷;展平进 RGBA context 再 `makeImage`
+    /// 得独立位图,CA 缓存其 surface → 不再重拷。尺寸为单帧原生像素(192×208),小 → 拖动重绘 re-prep 快、不闪。
+    private func standaloneFrameImage(col: Int, row: Int) -> CGImage? {
+        let key = row * Self.cols + col
+        if let cached = frameImageCache[key] { return cached }
+        let rect = CGRect(x: CGFloat(col) * frameW, y: CGFloat(row) * frameH, width: frameW, height: frameH)
+        guard let cropped = sheet.cropping(to: rect) else { return nil }
+        let w = cropped.width, h = cropped.height
+        // 展平失败(罕见)→ 回退裸 cropped:仍能正确显示该帧,只是退化回每帧 copy_image,不致空白。
+        guard w > 0, h > 0, let ctx = CGContext(
+            data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return cropped }
+        ctx.draw(cropped, in: CGRect(x: 0, y: 0, width: w, height: h))   // CGImage top-left ↔ context 往返保朝向
+        let flat = ctx.makeImage() ?? cropped
+        frameImageCache[key] = flat
+        return flat
     }
 
     private func schedule(loop: Bool, completion: (() -> Void)?) {
