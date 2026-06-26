@@ -1,5 +1,6 @@
 import Metal
 import simd
+import QuartzCore   // CACurrentMediaTime(SnowPerf 计时)
 
 /// 飞行雪粒子（CPU 端镜像 MSL SnowParticle，32 字节、与 GPU buffer 逐位对齐）。
 public struct SnowParticle: Equatable, Sendable {
@@ -215,19 +216,23 @@ public final class FallingSandParticles {
 
     /// 同步积分一帧（测试用，commit + wait）。
     public func integrate(dt: Float) {
+        let t = SnowPerf.isEnabled ? CACurrentMediaTime() : 0
         guard let cmd = queue.makeCommandBuffer() else { return }
         encodeIntegrate(into: cmd, dt: dt)
         cmd.commit()
         cmd.waitUntilCompleted()
+        SnowPerf.record("integrate", startTime: t, cmd)
     }
 
     /// 同步落地一帧（测试用，commit + wait）。
     public func land(cellBuffer: MTLBuffer, occlusionBuffer: MTLBuffer, columnDepthBuffer: MTLBuffer, dt: Float) {
+        let t = SnowPerf.isEnabled ? CACurrentMediaTime() : 0
         guard let cmd = queue.makeCommandBuffer(), let enc = cmd.makeComputeCommandEncoder() else { return }
         encodeLand(into: enc, cellBuffer: cellBuffer, occlusionBuffer: occlusionBuffer, columnDepthBuffer: columnDepthBuffer, dt: dt)
         enc.endEncoding()
         cmd.commit()
         cmd.waitUntilCompleted()
+        SnowPerf.record("land", startTime: t, cmd)
     }
 
     /// 把落地→CA 沉积 pass 编入 encoder：碰 floor/下方占用 + 列深未达上限 → 写 snow cell

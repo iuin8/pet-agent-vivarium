@@ -171,5 +171,6 @@ public final class FallingSandDriver {
             gridHeight: gridHeight
         )
         encoder.endEncoding()
+        SnowPerf.frameEnd()   // PETAGENT_DEBUG_SNOWPERF:每 60 帧打印 integrate/land/step 的 wall/gpu/cpu 帧均
     }
 }

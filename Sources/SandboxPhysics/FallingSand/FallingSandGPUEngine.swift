@@ -1,4 +1,5 @@
 import Metal
+import QuartzCore   // CACurrentMediaTime(SnowPerf 计时)
 
 /// Falling-sand GPU 引擎。双缓冲 cell buffer + reservation buffer，运行时编译
 /// `FallingSandKernels.source`。每个移动 sub-pass = clear → claim → commit 三
@@ -258,6 +259,7 @@ public final class FallingSandGPUEngine {
     /// 完整一帧：gravity（真雪概率门）→ flowL → flowR → 相变。全批进 1 个
     /// command buffer + 单次 waitUntilCompleted（4 次 GPU 往返 → 1 次）。
     public func step(dt: Float) {
+        let perfStart = SnowPerf.isEnabled ? CACurrentMediaTime() : 0
         let leftFirst = (frame & 1) == 0
         guard let cmd = queue.makeCommandBuffer(),
               let enc = cmd.makeComputeCommandEncoder() else { return }
@@ -284,6 +286,7 @@ public final class FallingSandGPUEngine {
         enc.endEncoding()
         cmd.commit()
         cmd.waitUntilCompleted()
+        SnowPerf.record("step", startTime: perfStart, cmd)
         currentIsA = (src === cellBufferA)
         frame &+= 1
     }
