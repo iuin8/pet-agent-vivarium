@@ -19,12 +19,16 @@ public final class ShimejiScriptEngine {
             context?.exception = exception
         }
         self.context = ctx
+        // 恒定函数定义只 parse 一次常驻(性能:JSC 不缓存 AST,旧版每 tick `evaluateScript` 整段
+        // 会重新 lex+parse+bytecode 这 7 个含闭包的函数 → 多宠 ×30Hz 时是主线程最大单项。§6.7)。
+        ctx.evaluateScript(Self.functionDefs)
     }
 
-    /// 每 tick(或每次状态变化后)重绑 mascot 快照。重复调用安全(setup 脚本幂等覆盖)。
+    /// 每 tick(或每次状态变化后)重绑 mascot 快照。重复调用安全(状态脚本幂等覆盖 var)。
+    /// 只 eval「变量 + mascot 对象」小段;恒定函数已在 init 常驻(免每帧重 parse)。
     public func sync(mascot: BehaviorMascot) {
         context.exception = nil
-        context.evaluateScript(Self.setupScript(mascot))
+        context.evaluateScript(Self.stateScript(mascot))
     }
 
     /// 写一个全局脚本变量(动作写回 `VelocityX`/`VelocityY`/`FootX`/`FootDX`,动画条件可读)。
@@ -74,27 +78,33 @@ public final class ShimejiScriptEngine {
 
     // MARK: - setup 脚本(mascot 状态 → JS 对象图)
 
-    /// 生成绑定 mascot 状态的 setup 脚本。`isOn` 与 floor/ceiling/wall 派生参照 Shimeji-Desktop 的
-    /// `Wall`/`FloorCeiling.isOn` + `MascotEnvironment.getFloor/getCeiling/getWall` 重新实现(逻辑级,未拷贝源码)。
+    /// **恒定**函数定义(不依赖 mascot 状态)→ init 里 parse 一次常驻。`isOn` 与 floor/ceiling/wall 派生
+    /// 参照 Shimeji-Desktop 的 `Wall`/`FloorCeiling.isOn` + `MascotEnvironment.getFloor/getCeiling/getWall`
+    /// 重新实现(逻辑级,未拷贝源码)。floor/ceiling/wall 读每 tick 由 `stateScript` 设的全局 `_ie/_wa/_anchor/_lookRight`。
+    static let functionDefs = """
+    function _fc(y,l,r,v){return{value:y,left:l,right:r,isOn:function(p){return v&&y===p.y&&l<=p.x&&p.x<=r;}};}
+    function _wl(x,t,b,v){return{value:x,top:t,bottom:b,isOn:function(p){return v&&x===p.x&&t<=p.y&&p.y<=b;}};}
+    function _notOn(){return{isOn:function(){return false;}};}
+    function _area(l,t,r,b,v){return{left:l,top:t,right:r,bottom:b,width:r-l,height:b-t,visible:v,leftBorder:_wl(l,t,b,v),rightBorder:_wl(r,t,b,v),topBorder:_fc(t,l,r,v),bottomBorder:_fc(b,l,r,v)};}
+    function _floor(){if(_ie.topBorder.isOn(_anchor))return _ie.topBorder;if(_wa.bottomBorder.isOn(_anchor))return _wa.bottomBorder;return _notOn();}
+    function _ceiling(){if(_ie.bottomBorder.isOn(_anchor))return _ie.bottomBorder;if(_wa.topBorder.isOn(_anchor))return _wa.topBorder;return _notOn();}
+    function _wall(){if(_lookRight){if(_ie.leftBorder.isOn(_anchor))return _ie.leftBorder;if(_wa.rightBorder.isOn(_anchor))return _wa.rightBorder;}else{if(_ie.rightBorder.isOn(_anchor))return _ie.rightBorder;if(_wa.leftBorder.isOn(_anchor))return _wa.leftBorder;}return _notOn();}
+    """
+
+    /// 每 tick 重绑的 mascot 状态部分(变量 + mascot 对象)。函数(`_area`/`_floor`/…)已在 init 常驻,
+    /// 此处只 parse 这一小段赋值。语义与旧 `setupScript` 逐位等价(同样的 var 赋值 + 同样调 `_area`/`_floor` 等)。
     /// 坐标取整(Shimeji 整数像素语义 → `===` 稳健,免浮点边界)。
-    static func setupScript(_ mascot: BehaviorMascot) -> String {
+    static func stateScript(_ mascot: BehaviorMascot) -> String {
         let a = mascot.anchor
         let env = mascot.environment
         let wa = env.workArea, ie = env.activeWindow, scr = env.screen, cur = env.cursor
         return """
-        function _fc(y,l,r,v){return{value:y,left:l,right:r,isOn:function(p){return v&&y===p.y&&l<=p.x&&p.x<=r;}};}
-        function _wl(x,t,b,v){return{value:x,top:t,bottom:b,isOn:function(p){return v&&x===p.x&&t<=p.y&&p.y<=b;}};}
-        function _notOn(){return{isOn:function(){return false;}};}
-        function _area(l,t,r,b,v){return{left:l,top:t,right:r,bottom:b,width:r-l,height:b-t,visible:v,leftBorder:_wl(l,t,b,v),rightBorder:_wl(r,t,b,v),topBorder:_fc(t,l,r,v),bottomBorder:_fc(b,l,r,v)};}
         var _anchor={x:\(int(a.x)),y:\(int(a.y))};
         var _lookRight=\(bool(mascot.lookRight));
         var _wa=_area(\(int(wa.left)),\(int(wa.top)),\(int(wa.right)),\(int(wa.bottom)),\(bool(wa.visible)));
         var _ie=_area(\(int(ie.left)),\(int(ie.top)),\(int(ie.right)),\(int(ie.bottom)),\(bool(ie.visible)));
         var _scr=_area(\(int(scr.left)),\(int(scr.top)),\(int(scr.right)),\(int(scr.bottom)),\(bool(scr.visible)));
         var _cursor={x:\(int(cur.x)),y:\(int(cur.y)),dx:\(num(cur.dx)),dy:\(num(cur.dy))};
-        function _floor(){if(_ie.topBorder.isOn(_anchor))return _ie.topBorder;if(_wa.bottomBorder.isOn(_anchor))return _wa.bottomBorder;return _notOn();}
-        function _ceiling(){if(_ie.bottomBorder.isOn(_anchor))return _ie.bottomBorder;if(_wa.topBorder.isOn(_anchor))return _wa.topBorder;return _notOn();}
-        function _wall(){if(_lookRight){if(_ie.leftBorder.isOn(_anchor))return _ie.leftBorder;if(_wa.rightBorder.isOn(_anchor))return _wa.rightBorder;}else{if(_ie.rightBorder.isOn(_anchor))return _ie.rightBorder;if(_wa.leftBorder.isOn(_anchor))return _wa.leftBorder;}return _notOn();}
         var mascot={anchor:_anchor,lookRight:_lookRight,totalCount:\(mascot.totalCount),environment:{workArea:_wa,activeIE:_ie,screen:_scr,cursor:_cursor,floor:_floor(),ceiling:_ceiling(),wall:_wall()}};
         """
     }
