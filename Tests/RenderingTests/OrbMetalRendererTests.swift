@@ -303,4 +303,32 @@ struct OrbMetalRendererTests {
         renderer.updateForState(.talking)
         #expect(renderer.targetUniformsForTesting == OrbUniforms.target(for: .talking))
     }
+
+    // MARK: - 招牌反应（signature → contentLayer keyframe）
+
+    @Test("supportedSignatures 含 celebrate/greet/acknowledge/refuse/reactToDragEnd，不含 signatureIdle")
+    func supportsExpectedSignatures() {
+        guard hasMetalDevice(), let renderer = OrbMetalRenderer() else { return }
+        let s = renderer.supportedSignatures
+        #expect(s.contains(.celebrate))
+        #expect(s.contains(.greet))
+        #expect(s.contains(.acknowledge))
+        #expect(s.contains(.refuse))
+        #expect(s.contains(.reactToDragEnd))
+        #expect(!s.contains(.signatureIdle))   // Orb idle 走呼吸，不作招牌反应
+    }
+
+    @Test("trigger 给 contentLayer 加对应 keyframe 动画（原生反应，非 no-op）")
+    func triggerAddsLayerAnimation() {
+        guard hasMetalDevice(), let renderer = OrbMetalRenderer() else { return }
+        let layer = renderer.contentLayer
+        renderer.trigger(.celebrate)
+        #expect(layer.animation(forKey: "orb.celebrate") != nil)
+        renderer.trigger(.acknowledge)
+        #expect(layer.animation(forKey: "orb.acknowledge") != nil)
+        renderer.trigger(.refuse)
+        #expect(layer.animation(forKey: "orb.refuse") != nil)
+        renderer.trigger(.reactToDragEnd)
+        #expect(layer.animation(forKey: "orb.dragEnd") != nil)
+    }
 }

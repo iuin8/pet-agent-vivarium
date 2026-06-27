@@ -11,7 +11,10 @@ import QuartzCore
 //   - 物理 squash 耦合（updateForVelocity，沿速度拉长、垂直压扁，体积守恒）
 //   - pile（雪）接触 mask 纹理绑定（预留；默认 1×1 zero-alpha dummy）
 //
-// supportedSignatures 用基类默认空集（Orb 无招牌动作，交互反馈走 PetChatAnimator ambient 层）。
+// 招牌反应（celebrate/greet/acknowledge/refuse/reactToDragEnd）走 CALayer CAKeyframeAnimation
+// 叠在 contentLayer 上（同 Slime 范式，不改 shader）—— Orb 是程序化自绘形象、无「官方动画」可继承，
+// 故手搓专属反应（符合 AGENTS「形象插件化」约束第 3 条：仅程序化形象才允许手搓）。与 reply 的
+// PetChatAnimator layer-jump（transform.translation.y）keyPath 互不冲突，可叠加组合。
 
 @MainActor
 public final class OrbMetalRenderer: MetalPetRenderer {
@@ -87,6 +90,72 @@ public final class OrbMetalRenderer: MetalPetRenderer {
         // 乘上情绪基的 squashY，让 talking burst（0.92）在拖动时仍可见 —— 物理不抹情绪。
         t.squashY = stateBaseUniforms.squashY * resultY
         targetUniforms = t
+    }
+
+    // MARK: - 招牌反应（CALayer keyframe，叠 contentLayer，不改 shader；同 Slime 范式）
+
+    public override var supportedSignatures: Set<SignatureAction> {
+        [.celebrate, .greet, .acknowledge, .refuse, .reactToDragEnd]
+    }
+
+    private static let celebrateKey = "orb.celebrate"
+    private static let acknowledgeKey = "orb.acknowledge"
+    private static let refuseKey = "orb.refuse"
+    private static let dragEndKey = "orb.dragEnd"
+    private static let reactionEase = CAMediaTimingFunction(name: .easeInEaseOut)
+
+    public override func trigger(_ signature: SignatureAction) {
+        let layer = contentLayer
+        switch signature {
+        case .celebrate:      applyScalePop(on: layer, peak: 1.10, duration: 0.40, key: Self.celebrateKey)
+        case .greet:          applyScalePop(on: layer, peak: 1.06, duration: 0.45, key: Self.celebrateKey)
+        case .acknowledge:    applyScaleDip(on: layer, low: 0.92, duration: 0.22, key: Self.acknowledgeKey)
+        case .reactToDragEnd: applyDragSettle(on: layer, key: Self.dragEndKey)
+        case .refuse:         applyShake(on: layer, key: Self.refuseKey)
+        case .signatureIdle:  break   // Orb idle 走呼吸（LifeSignsTokens），不额外反应
+        }
+    }
+
+    /// 上弹回落（celebrate / greet）—— scale 升到峰值再回 1.0。
+    private func applyScalePop(on layer: CALayer, peak: CGFloat, duration: CFTimeInterval, key: String) {
+        let anim = CAKeyframeAnimation(keyPath: "transform.scale")
+        anim.values = [1.0, peak, 1.0]
+        anim.keyTimes = [0, 0.4, 1]
+        anim.duration = duration
+        anim.timingFunction = Self.reactionEase
+        layer.add(anim, forKey: key)
+    }
+
+    /// 轻点头（acknowledge）—— 快速 scale 下沉再回，像「收到」。
+    private func applyScaleDip(on layer: CALayer, low: CGFloat, duration: CFTimeInterval, key: String) {
+        let anim = CAKeyframeAnimation(keyPath: "transform.scale")
+        anim.values = [1.0, low, 1.0]
+        anim.keyTimes = [0, 0.5, 1]
+        anim.duration = duration
+        anim.timingFunction = Self.reactionEase
+        layer.add(anim, forKey: key)
+    }
+
+    /// 落定回弹（reactToDragEnd）—— 先压一下再轻微回弹归位。
+    private func applyDragSettle(on layer: CALayer, key: String) {
+        let anim = CAKeyframeAnimation(keyPath: "transform.scale")
+        anim.values = [1.0, 0.93, 1.05, 1.0]
+        anim.keyTimes = [0, 0.3, 0.65, 1]
+        anim.duration = 0.36
+        anim.timingFunction = Self.reactionEase
+        layer.add(anim, forKey: key)
+    }
+
+    /// 颤一下（refuse）—— 横向 additive 抖动（同 Slime）。
+    private func applyShake(on layer: CALayer, key: String) {
+        let a: CGFloat = 6
+        let anim = CAKeyframeAnimation(keyPath: "transform.translation.x")
+        anim.values = [0, a, -a, a, -a, 0]
+        anim.keyTimes = [0, 0.2, 0.4, 0.6, 0.8, 1]
+        anim.duration = 0.5
+        anim.timingFunction = Self.reactionEase
+        anim.isAdditive = true
+        layer.add(anim, forKey: key)
     }
 
     // MARK: - 每帧编码（基类 hook）
