@@ -88,6 +88,13 @@ struct SlimeMetalRendererTests {
         #expect(!sig.contains(.reactToDragEnd))
     }
 
+    @Test("SlimeMetalRenderer supportsAutonomousRoaming == true(会爬的软体生物 opt-in 漫步+爬墙)")
+    @MainActor
+    func slimeSupportsRoaming() {
+        guard let r = SlimeMetalRenderer() else { return }
+        #expect(r.supportsAutonomousRoaming)
+    }
+
     // MARK: - SignatureAction trigger → CAAnimation key
 
     @Test("trigger(.celebrate) 给 layer 挂 celebrateKey 动画")

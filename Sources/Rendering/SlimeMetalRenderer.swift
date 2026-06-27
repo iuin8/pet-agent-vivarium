@@ -27,6 +27,9 @@ public final class SlimeMetalRenderer: MetalPetRenderer {
         [.celebrate, .refuse, .acknowledge]
     }
 
+    /// 史莱姆是会爬的软体生物 —— 显式 opt-in 自主漫步 + 爬墙（弹力球 Orb 保持默认 false）。
+    public override var supportsAutonomousRoaming: Bool { true }
+
     public static let celebrateKey   = "slime.celebrate"
     public static let refuseKey      = "slime.refuse"
     public static let acknowledgeKey = "slime.acknowledge"

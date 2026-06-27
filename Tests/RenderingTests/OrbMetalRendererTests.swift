@@ -179,6 +179,13 @@ struct OrbMetalRendererTests {
         #expect(String(describing: t).contains("OrbMetalRenderer"))
     }
 
+    @Test("OrbMetalRenderer supportsAutonomousRoaming == false(弹力球纯物理,继承基类默认,不漫步爬墙)")
+    func orbDoesNotRoam() {
+        guard hasMetalDevice() else { return }
+        guard let renderer = OrbMetalRenderer() else { return }
+        #expect(renderer.supportsAutonomousRoaming == false)
+    }
+
     // MARK: - GPU-gated lifecycle tests
 
     @Test("OrbMetalRenderer initializes when Metal is available, view sized")

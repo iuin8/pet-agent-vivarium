@@ -264,6 +264,14 @@ public protocol PetRenderer: AnyObject {
     /// 帧循环据此 switch 分发，取代 `as? ShimejiPetRenderer` 二元 cast。
     var driveModel: PetDriveModel { get }
 
+    /// 本形象是否支持「自主漫步 + 爬墙」这类**行走生物**运动（opt-in，默认 `false`）。
+    /// 仅 `.proceduralMotion` 形象有意义：会走会爬的生物（如史莱姆）覆写为 `true`；
+    /// **弹力球（Orb）等纯物理形象保持默认 `false`** —— 其原生运动只有物理回落 / 跟随光标 /
+    /// 弹跳 squash，走路爬墙非它的能力，不该被宿主 `PetMotionController` 强加。
+    /// 帧循环按此闸 roaming：`false` → 控制器恒走 `.physics`（透传 cursor-follow 候选），
+    /// 右键 / 状态栏菜单的「桌面漫游」项据此灰显（「跟随光标」仍由 `driveModel` 决定）。
+    var supportsAutonomousRoaming: Bool { get }
+
     /// 推入 agent 活动视觉态。仅 `.activityStateIndicator` 形象（如 petdex sprite）消费，
     /// 其余 renderer 默认 no-op。App 接线层把 `AgentActivityState` 映射成 `PetActivityVisual`
     /// 后调本方法，Rendering 层不直接依赖 AgentSensing。
@@ -312,6 +320,10 @@ public extension PetRenderer {
 
     /// 默认 `.proceduralMotion`。Orb/Slime/未声明 renderer 行为不变。
     var driveModel: PetDriveModel { .proceduralMotion }
+
+    /// 默认 `false`（opt-in）。弹力球（Orb）等纯物理形象保持默认 → 只物理回落 / 跟随，不漫步爬墙。
+    /// 会走会爬的形象（史莱姆等）在各自渲染器覆写为 `true`。
+    var supportsAutonomousRoaming: Bool { false }
 
     /// 默认 no-op。仅 `.activityStateIndicator` 形象（如 petdex sprite）覆盖实现，
     /// 其余 renderer 安全忽略推入的活动视觉态。
