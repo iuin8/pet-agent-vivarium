@@ -98,6 +98,9 @@ public final class OrbMetalRenderer: MetalPetRenderer {
         [.celebrate, .greet, .acknowledge, .refuse, .reactToDragEnd]
     }
 
+    /// 弹力球本体 —— 甩出/松手有重力回弹抛射物理(`.ballistic`,撞窗口边/屏幕边回弹后落定)。
+    public override var supportsThrowPhysics: Bool { true }
+
     private static let celebrateKey = "orb.celebrate"
     private static let acknowledgeKey = "orb.acknowledge"
     private static let refuseKey = "orb.refuse"

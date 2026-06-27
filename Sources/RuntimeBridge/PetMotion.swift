@@ -20,6 +20,10 @@ public enum PetMotionMode: Sendable, Equatable {
     case physics
     /// 空闲自主游走。
     case roaming
+    /// 抛射回弹中 —— 拖拽甩出 / 松手落体:受重力 + 空气阻力积分,撞窗口边/屏幕边按
+    /// 弹性系数反射,速度衰减到阈值且有支撑 → 落定转 `.physics`。**弹力球(Orb)专属**
+    /// (`supportsThrowPhysics`),优先于跟随/漫游;用户重新抓起(拖拽)立即打断。
+    case ballistic
     /// 沿窗口侧边向上攀爬中 —— 到顶后转 `.perched`。
     case climbing
     /// 锚定某窗口顶边。
@@ -74,6 +78,9 @@ public struct PetMotionInput: Sendable, Equatable {
     /// 高 → 暂停短、走得快(活泼);低 → 暂停长、走得慢(慵懒)。默认 0.5 中性。参考 GodotDesktopPet
     /// 的 mood-weighted 动作选择(只借思路)。
     public let liveliness: Double
+    /// pet 当前窗口宽/高(px)。`.ballistic` 抛射回弹按此 AABB 与窗口/屏幕边碰撞。默认 72(初始尺寸)。
+    public let petWidth: Double
+    public let petHeight: Double
 
     public init(
         deltaTime: Double,
@@ -83,7 +90,9 @@ public struct PetMotionInput: Sendable, Equatable {
         idleSeconds: Double = 0,
         followingEnabled: Bool = true,
         roamingEnabled: Bool = true,
-        liveliness: Double = 0.5
+        liveliness: Double = 0.5,
+        petWidth: Double = 72,
+        petHeight: Double = 72
     ) {
         self.deltaTime = deltaTime
         self.cursorPosition = cursorPosition
@@ -93,6 +102,8 @@ public struct PetMotionInput: Sendable, Equatable {
         self.followingEnabled = followingEnabled
         self.roamingEnabled = roamingEnabled
         self.liveliness = liveliness
+        self.petWidth = petWidth
+        self.petHeight = petHeight
     }
 }
 

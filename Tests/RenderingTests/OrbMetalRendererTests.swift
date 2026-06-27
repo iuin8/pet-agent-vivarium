@@ -186,6 +186,13 @@ struct OrbMetalRendererTests {
         #expect(renderer.supportsAutonomousRoaming == false)
     }
 
+    @Test("OrbMetalRenderer supportsThrowPhysics == true(弹力球甩出/松手有重力回弹抛射)")
+    func orbSupportsThrowPhysics() {
+        guard hasMetalDevice() else { return }
+        guard let renderer = OrbMetalRenderer() else { return }
+        #expect(renderer.supportsThrowPhysics == true)
+    }
+
     // MARK: - GPU-gated lifecycle tests
 
     @Test("OrbMetalRenderer initializes when Metal is available, view sized")

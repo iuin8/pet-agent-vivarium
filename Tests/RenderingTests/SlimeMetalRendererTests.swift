@@ -95,6 +95,13 @@ struct SlimeMetalRendererTests {
         #expect(r.supportsAutonomousRoaming)
     }
 
+    @Test("SlimeMetalRenderer supportsThrowPhysics == false(默认,抛射回弹是弹力球专属)")
+    @MainActor
+    func slimeNoThrowPhysics() {
+        guard let r = SlimeMetalRenderer() else { return }
+        #expect(r.supportsThrowPhysics == false)
+    }
+
     // MARK: - SignatureAction trigger → CAAnimation key
 
     @Test("trigger(.celebrate) 给 layer 挂 celebrateKey 动画")

@@ -78,6 +78,8 @@ open class MetalPetRenderer: PetRenderer {
     /// 默认 `false`：程序化形象**不**自主漫步爬墙（弹力球 Orb 直接继承 → 纯物理）。
     /// 会走会爬的程序化形象（史莱姆）覆写为 `true`。
     open var supportsAutonomousRoaming: Bool { false }
+    /// 默认 `false`：不支持抛射回弹。弹力球 Orb 覆写 `true`。
+    open var supportsThrowPhysics: Bool { false }
 
     // MARK: - Init
 

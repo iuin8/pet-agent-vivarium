@@ -46,6 +46,10 @@ public struct PetMotionController: Sendable, Equatable {
     private var screenEdgeClimb: Bool
     /// 屏幕边攀爬的目标吸附高度(y)。窗口攀爬用 `climbingRect` 顶边,不读此值。
     private var climbTopY: Double
+    /// `.ballistic` 抛射速度(px/s,bottom-origin y-up)。仅抛射模式有效,其余模式恒视为 0。
+    private var velocity: Point
+    /// 抛射回弹可调参数(重力/弹性/阻力/落定阈值…)。默认工厂值;App 从「设置→调试」实时改。
+    public var tuning = BallisticTuning()
     /// 选路点 / 爬墙概率用的确定性 PRNG。
     private var rng: PetMotionRandom
 
@@ -92,6 +96,7 @@ public struct PetMotionController: Sendable, Equatable {
         self.climbFacing = .right
         self.screenEdgeClimb = false
         self.climbTopY = 0
+        self.velocity = Point(x: 0, y: 0)
         self.rng = PetMotionRandom(seed: seed)
     }
 
@@ -130,6 +135,10 @@ public struct PetMotionController: Sendable, Equatable {
         candidate: Point,
         input: PetMotionInput
     ) -> (PetMotionMode, Point) {
+        // 抛射回弹优先:飞行/落体期间无视跟随/漫游,直到落定(用户重新抓起经 clearForExternalControl 打断)。
+        if mode == .ballistic {
+            return integrateBallistic(previous: previous, input: input)
+        }
         let userActive = input.idleSeconds < Self.roamThresholdSeconds
         // 跟随开 + 活跃 → 追光标,清空溜达/爬墙态。
         if input.followingEnabled && userActive {
@@ -196,12 +205,69 @@ public struct PetMotionController: Sendable, Equatable {
         return (.physics, input.followingEnabled ? candidate : previous)
     }
 
+    /// 抛射一帧:重力 + 空气阻力 → 位移 → 窗口/屏幕边回弹(纯几何在 `+Ballistics`)→ 落定判定。
+    /// 速度衰减到阈值且有支撑(地面/窗口顶)→ 清速度、切 `.physics` 交回跟随/静止。
+    private mutating func integrateBallistic(previous: Point, input: PetMotionInput) -> (PetMotionMode, Point) {
+        let dt = input.deltaTime
+        var vx = velocity.x
+        var vy = velocity.y - tuning.gravity * dt
+        let drag = max(0.0, 1.0 - tuning.airDrag * dt)
+        vx *= drag; vy *= drag
+        var ox = previous.x + vx * dt
+        var oy = previous.y + vy * dt
+        let pw = input.petWidth, ph = input.petHeight
+        // 窗口障碍逐个反射(AABB 外侧,最小穿透轴)。
+        for window in input.windows {
+            let r = Self.reflectOffAABB(
+                ox: ox, oy: oy, pw: pw, ph: ph, vx: vx, vy: vy, obstacle: window,
+                restitution: tuning.restitution, friction: tuning.tangentFriction)
+            ox = r.ox; oy = r.oy; vx = r.vx; vy = r.vy
+        }
+        // 屏幕四壁。
+        let c = Self.clampInsideBounds(
+            ox: ox, oy: oy, pw: pw, ph: ph, vx: vx, vy: vy, bounds: input.screenBounds,
+            restitution: tuning.restitution, friction: tuning.tangentFriction)
+        ox = c.ox; oy = c.oy; vx = c.vx; vy = c.vy
+        // 落定。
+        let speed = (vx * vx + vy * vy).squareRoot()
+        if speed < tuning.settleSpeed,
+           Self.isSupported(ox: ox, oy: oy, pw: pw, ph: ph, bounds: input.screenBounds, windows: input.windows) {
+            velocity = Point(x: 0, y: 0)
+            mode = .physics
+            return (.physics, Point(x: ox, y: oy))
+        }
+        velocity = Point(x: vx, y: vy)
+        return (.ballistic, Point(x: ox, y: oy))
+    }
+
     private mutating func clearTransientState() {
         roamTargetX = nil
         roamPauseRemaining = 0
         perchedRect = nil
         climbingRect = nil
         screenEdgeClimb = false
+        velocity = Point(x: 0, y: 0)
+    }
+
+    /// 当前是否在抛射回弹中(飞行/落体)。帧循环据此决定即使跟随/漫游都关也要驱动位置 + 移窗。
+    public var isBallistic: Bool { mode == .ballistic }
+
+    /// 拖拽甩出 / 松手 → 进入 `.ballistic`,以 `velocity`(px/s,bottom-origin y-up)为初速。
+    /// 速度被 clamp 到 `throwMaxLaunchSpeed` 防穿透。清掉漫步/爬墙过渡态。
+    public mutating func beginThrow(velocity v: Point) {
+        roamTargetX = nil
+        roamPauseRemaining = 0
+        perchedRect = nil
+        climbingRect = nil
+        screenEdgeClimb = false
+        let speed = (v.x * v.x + v.y * v.y).squareRoot()
+        if speed > tuning.maxLaunchSpeed {
+            let scale = tuning.maxLaunchSpeed / speed
+            velocity = Point(x: v.x * scale, y: v.y * scale)
+        } else {
+            velocity = v
+        }
+        mode = .ballistic
     }
 
     /// 外部接管(用户拖拽)时调:清掉漫步路点 + 所站窗口 perch + 回 `.physics`。
@@ -338,6 +404,9 @@ public struct PetMotionController: Sendable, Equatable {
     static func phase(from: Point, to: Point, mode: PetMotionMode) -> PetMotionPhase {
         if mode == .perched {
             return .perching
+        }
+        if mode == .ballistic {
+            return .falling   // 抛射飞行/落体 → falling(sprite 跳帧;Orb squash 由 runtime 速度链路自动驱动)
         }
         if mode == .climbing {   // 攀爬时 x 锚定侧边(dx≈0),朝向由 resolved 用 climbFacing 覆盖,此处兜底。
             return .climbing(to.x >= from.x ? .right : .left)

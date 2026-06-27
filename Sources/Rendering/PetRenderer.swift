@@ -272,6 +272,12 @@ public protocol PetRenderer: AnyObject {
     /// 右键 / 状态栏菜单的「桌面漫游」项据此灰显（「跟随光标」仍由 `driveModel` 决定）。
     var supportsAutonomousRoaming: Bool { get }
 
+    /// 本形象是否支持「拖拽甩出 + 重力回弹」抛射物理（opt-in，默认 `false`）。
+    /// **弹力球（Orb）覆写 `true`** —— 松手 / 甩出 → 受重力走抛物线、撞窗口边/屏幕边按弹性回弹、
+    /// 落定在窗口顶或地面。仅 `.proceduralMotion`（host `PetMotionController` 仲裁位置）形象有意义；
+    /// 自管位置的形象（Shimeji 引擎自带 Thrown / sprite·Live2D 位置固定）保持 `false`。
+    var supportsThrowPhysics: Bool { get }
+
     /// 推入 agent 活动视觉态。仅 `.activityStateIndicator` 形象（如 petdex sprite）消费，
     /// 其余 renderer 默认 no-op。App 接线层把 `AgentActivityState` 映射成 `PetActivityVisual`
     /// 后调本方法，Rendering 层不直接依赖 AgentSensing。
@@ -324,6 +330,9 @@ public extension PetRenderer {
     /// 默认 `false`（opt-in）。弹力球（Orb）等纯物理形象保持默认 → 只物理回落 / 跟随，不漫步爬墙。
     /// 会走会爬的形象（史莱姆等）在各自渲染器覆写为 `true`。
     var supportsAutonomousRoaming: Bool { false }
+
+    /// 默认 `false`（opt-in）。弹力球（Orb）覆写 `true` → 甩出/松手有重力回弹抛射物理。
+    var supportsThrowPhysics: Bool { false }
 
     /// 默认 no-op。仅 `.activityStateIndicator` 形象（如 petdex sprite）覆盖实现，
     /// 其余 renderer 安全忽略推入的活动视觉态。
